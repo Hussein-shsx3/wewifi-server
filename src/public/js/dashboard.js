@@ -16,392 +16,142 @@ function showToast(message, type = "success") {
   // Remove any existing toast
   const existingToast = document.querySelector(".toast-notification");
   if (existingToast) {
-    // ================================================================
-    //  SMS SECTION V2 — Replace / merge with existing SMS functions
-    // ================================================================
+    existingToast.remove();
+  }
 
-    // ── State ──
-    let smsCurrentMode = 'single';       // 'single' | 'bulk'
-    let smsAllSubscribers = [];          // full list for bulk
-    let smsFilteredSubscribers = [];     // after filter
-    let smsSelectedIds = new Set();      // selected subscriber ids
-    let smsSentLog = [];                 // local send log
+  // Create toast element
+  const toast = document.createElement("div");
+  toast.className = `toast-notification toast-${type}`;
 
-    // ── Switch between single / bulk mode ──
-    function switchSmsMode(mode) {
-      smsCurrentMode = mode;
-      document.getElementById('smsSingleMode').style.display = mode === 'single' ? '' : 'none';
-      document.getElementById('smsBulkMode').style.display   = mode === 'bulk'   ? '' : 'none';
+  // Icon based on type
+  const icons = {
+    success: "fa-check-circle",
+    error: "fa-exclamation-circle",
+    warning: "fa-exclamation-triangle",
+    info: "fa-info-circle",
+  };
 
-      document.getElementById('singleModeTab').classList.toggle('active', mode === 'single');
-      document.getElementById('bulkModeTab').classList.toggle('active', mode === 'bulk');
+  toast.innerHTML = `
+    <i class="fas ${icons[type] || icons.info}"></i>
+    <span>${message}</span>
+  `;
 
-      const sendText = document.getElementById('smsSendBtnText');
-      if (mode === 'bulk') {
-        populateSmsRecipientsList();
-        updateSmsSendBtn();
-      } else {
-        sendText.textContent = 'إرسال الرسالة';
-      }
+  document.body.appendChild(toast);
+
+  // Trigger animation
+  setTimeout(() => toast.classList.add("show"), 10);
+
+  // Auto-remove after 3 seconds
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+// =============================================
+// CUSTOM CONFIRM DIALOG
+// =============================================
+function showConfirm(message, onConfirm, onCancel = null) {
+  // Remove any existing confirm dialog
+  const existing = document.querySelector(".confirm-dialog-overlay");
+  if (existing) existing.remove();
+
+  const overlay = document.createElement("div");
+  overlay.className = "confirm-dialog-overlay";
+  overlay.innerHTML = `
+    <div class="confirm-dialog">
+      <div class="confirm-dialog-icon">
+        <i class="fas fa-question-circle"></i>
+      </div>
+      <p class="confirm-dialog-message">${message}</p>
+      <div class="confirm-dialog-buttons">
+        <button type="button" class="confirm-btn confirm-btn-danger" id="confirmYesBtn">
+          <i class="fas fa-check"></i> نعم، احذف
+        </button>
+        <button type="button" class="confirm-btn confirm-btn-cancel" id="confirmNoBtn">
+          <i class="fas fa-times"></i> إلغاء
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  // Show with animation
+  setTimeout(() => overlay.classList.add("show"), 10);
+
+  // Handle buttons
+  const yesBtn = overlay.querySelector("#confirmYesBtn");
+  const noBtn = overlay.querySelector("#confirmNoBtn");
+
+  const closeDialog = () => {
+    overlay.classList.remove("show");
+    setTimeout(() => overlay.remove(), 200);
+  };
+
+  yesBtn.onclick = () => {
+    closeDialog();
+    if (onConfirm) onConfirm();
+  };
+
+  noBtn.onclick = () => {
+    closeDialog();
+    if (onCancel) onCancel();
+  };
+
+  // Close on overlay click
+  overlay.onclick = (e) => {
+    if (e.target === overlay) {
+      closeDialog();
+      if (onCancel) onCancel();
     }
+  };
 
-    // ── Toggle recipient type (subscriber vs custom) ──
-    function toggleSmsRecipientType() {
-      const type = document.querySelector('input[name="smsRecipientType"]:checked')?.value;
-      document.getElementById('smsSubscriberGroup').style.display  = type === 'subscriber' ? '' : 'none';
-      document.getElementById('smsCustomPhoneGroup').style.display = type === 'custom'     ? '' : 'none';
-
-      // Update chip styles
-      document.querySelectorAll('.sms-toggle-chip').forEach(chip => {
-        chip.classList.remove('active-chip');
-        const radio = chip.previousElementSibling || chip.parentElement.querySelector('input');
-      });
-      document.querySelectorAll('.sms-toggle-label input').forEach(radio => {
-        const chip = radio.nextElementSibling;
-        if (chip) chip.style.borderColor = radio.checked ? '#f5a623' : '';
-      });
+  // Close on Escape key
+  const handleEscape = (e) => {
+    if (e.key === "Escape") {
+      closeDialog();
+      if (onCancel) onCancel();
+      document.removeEventListener("keydown", handleEscape);
     }
+  };
+  document.addEventListener("keydown", handleEscape);
+}
 
-    // ── Populate recipients list (bulk mode) ──
-    async function populateSmsRecipientsList() {
-      const list = document.getElementById('smsRecipientsList');
-      list.innerHTML = '<div class="sms-list-loading"><i class="fas fa-circle-notch fa-spin"></i> جاري التحميل...</div>';
+// Helper function for authenticated API calls
+async function authenticatedFetch(url, options = {}) {
+  const response = await fetch(url, options);
 
-      try {
-        if (smsAllSubscribers.length === 0) {
-          const res = await authenticatedFetch('/api/subscribers?limit=9999');
-          const data = await res.json();
-          smsAllSubscribers = (data.data || data).filter(s => s.phone);
-        }
-        smsFilteredSubscribers = [...smsAllSubscribers];
-        renderSmsRecipientsList();
-      } catch (err) {
-        list.innerHTML = '<div class="sms-list-empty">تعذر تحميل المشتركين</div>';
-      }
+  // Check if response is JSON (authenticated) or HTML (redirect to login)
+  const contentType = response.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    // If it's a successful response but not JSON (e.g., file download), allow it
+    if (response.ok) {
+      return response;
     }
+    // Otherwise, assume it's a redirect to login
+    window.location.href = "/login";
+    throw new Error("Not authenticated");
+  }
 
-    // ── Filter recipients ──
-    function filterSmsRecipients() {
-      const speedVal  = document.getElementById('smsBulkSpeedFilter')?.value || '';
-      const searchVal = (document.getElementById('smsBulkSearch')?.value || '').toLowerCase().trim();
+  return response;
+}
 
-      smsFilteredSubscribers = smsAllSubscribers.filter(s => {
-        if (!s.phone) return false;
-        if (speedVal && String(s.speed) !== speedVal) return false;
-        if (searchVal) {
-          const name  = (s.fullName || '').toLowerCase();
-          const phone = (s.phone    || '').toLowerCase();
-          if (!name.includes(searchVal) && !phone.includes(searchVal)) return false;
-        }
-        return true;
-      });
+// Format date to Arabic format (DD/MM/YYYY)
+function formatDate(dateString) {
+  if (!dateString) return "-";
+  const date = new Date(dateString);
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+}
 
-      renderSmsRecipientsList();
-    }
-
-    // ── Render list ──
-    function renderSmsRecipientsList() {
-      const list = document.getElementById('smsRecipientsList');
-      if (!smsFilteredSubscribers.length) {
-        list.innerHTML = '<div class="sms-list-empty">لا يوجد مشتركون مطابقون للبحث</div>';
-        return;
-      }
-
-      list.innerHTML = smsFilteredSubscribers.map(s => {
-        const checked  = smsSelectedIds.has(s.id) ? 'checked' : '';
-        const selClass = smsSelectedIds.has(s.id) ? 'selected' : '';
-        return `
-          <div class="sms-recipient-item ${selClass}" onclick="toggleSmsRecipient(${s.id}, this)">
-            <input type="checkbox" ${checked} onclick="event.stopPropagation(); toggleSmsRecipient(${s.id}, this.closest('.sms-recipient-item'))">
-            <span class="sms-recipient-name">${escapeHtml(s.fullName || s.username || '-')}</span>
-            <span class="sms-recipient-phone">${escapeHtml(s.phone)}</span>
-            <span class="sms-recipient-speed">${s.speed}M</span>
-          </div>`;
-      }).join('');
-
-      updateSmsSendBtn();
-    }
-
-    // ── Toggle one recipient ──
-    function toggleSmsRecipient(id, rowEl) {
-      if (smsSelectedIds.has(id)) {
-        smsSelectedIds.delete(id);
-        rowEl.classList.remove('selected');
-        rowEl.querySelector('input[type="checkbox"]').checked = false;
-      } else {
-        smsSelectedIds.add(id);
-        rowEl.classList.add('selected');
-        rowEl.querySelector('input[type="checkbox"]').checked = true;
-      }
-      updateSmsSendBtn();
-    }
-
-    // ── Toggle all ──
-    function toggleAllSmsRecipients(masterCb) {
-      smsFilteredSubscribers.forEach(s => {
-        if (masterCb.checked) smsSelectedIds.add(s.id);
-        else smsSelectedIds.delete(s.id);
-      });
-      renderSmsRecipientsList();
-      updateSmsSendBtn();
-    }
-
-    // ── Update send button & badge ──
-    function updateSmsSendBtn() {
-      const count    = smsSelectedIds.size;
-      const badge    = document.getElementById('smsBulkBadge');
-      const sendText = document.getElementById('smsSendBtnText');
-      const countEl  = document.getElementById('smsSelectedCount');
-
-      if (badge)    { badge.textContent = count; badge.style.display = count > 0 ? '' : 'none'; }
-      if (countEl)  countEl.textContent = `${count} محدد`;
-      if (sendText) {
-        sendText.textContent = smsCurrentMode === 'bulk' && count > 0
-          ? `إرسال لـ ${count} مشترك`
-          : 'إرسال الرسالة';
-      }
-    }
-
-    // ── Quick message templates ──
-    function insertSmsTemplate(type) {
-      const ta = document.getElementById('smsMessage');
-      const templates = {
-        renewal: 'عزيزي المشترك، نذكّركم بأن اشتراككم في شبكة WeWifi على وشك الانتهاء. يُرجى التجديد للاستمرار في الخدمة. للتواصل: 05XXXXXXXX',
-        welcome: 'أهلاً بك في شبكة WeWifi! يسعدنا انضمامك إلينا. لأي استفسار أو مساعدة لا تتردد بالتواصل معنا. شكراً لثقتك.',
-        promo:   'عرض خاص من WeWifi 🎉 اشترك الآن بسعر مميز وسرعة فائقة. العرض محدود، تواصل معنا اليوم: 05XXXXXXXX',
-      };
-      if (templates[type]) {
-        ta.value = templates[type];
-        ta.dispatchEvent(new Event('input'));
-        ta.focus();
-      }
-    }
-
-    // ── Character counter ──
-    function setupSmsCharCounter() {
-      const ta   = document.getElementById('smsMessage');
-      const pill = document.getElementById('smsCharCount');
-      if (!ta || !pill) return;
-      ta.addEventListener('input', () => {
-        const len = ta.value.length;
-        pill.textContent = `${len} / 320`;
-        pill.classList.toggle('warn',   len > 200 && len <= 280);
-        pill.classList.toggle('danger', len > 280);
-      });
-    }
-
-    // ── Add entry to sent log ──
-    function addSmsLogEntry({ name, message, success, bulk, count }) {
-      const logList = document.getElementById('smsLogList');
-      const emptyEl = logList.querySelector('.sms-log-empty');
-      if (emptyEl) emptyEl.remove();
-
-      const now  = new Date();
-      const time = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-
-      const item = document.createElement('div');
-      item.className = `sms-log-item ${success ? 'success' : 'error'}`;
-      item.innerHTML = `
-        <div class="sms-log-item-header">
-          <span class="sms-log-name">${escapeHtml(name)}</span>
-          <span class="sms-log-time">${time}</span>
-        </div>
-        <div class="sms-log-msg">${escapeHtml(message.substring(0, 60))}${message.length > 60 ? '...' : ''}</div>
-        ${bulk ? `<span class="sms-log-bulk-label"><i class="fas fa-users"></i> جماعي · ${count} مشترك</span>` : ''}`;
-
-      logList.insertBefore(item, logList.firstChild);
-
-      // Keep max 10 entries
-      const items = logList.querySelectorAll('.sms-log-item');
-      if (items.length > 10) items[items.length - 1].remove();
-    }
-
-    // ── Main form submit handler ──
-    async function handleSmsSubmit(e) {
-      e.preventDefault();
-      const message = document.getElementById('smsMessage').value.trim();
-      if (!message) return showToast('يرجى كتابة نص الرسالة', 'error');
-
-      if (smsCurrentMode === 'bulk') {
-        await sendSmsBulk(message);
-      } else {
-        await sendSmsSingle(message);
-      }
-    }
-
-    // ── Send to one subscriber ──
-    async function sendSmsSingle(message) {
-      const recipientType = document.querySelector('input[name="smsRecipientType"]:checked')?.value;
-      let phone;
-
-      if (recipientType === 'subscriber') {
-        phone = document.getElementById('smsSelectedPhone')?.value;
-        if (!phone) return showToast('يرجى اختيار مشترك من القائمة', 'error');
-      } else {
-        phone = document.getElementById('smsCustomPhone')?.value?.trim();
-        if (!phone) return showToast('يرجى إدخال رقم الجوال', 'error');
-      }
-
-      const btn = document.getElementById('smsSendBtn');
-      btn.disabled = true;
-
-      try {
-        const res  = await authenticatedFetch('/api/subscribers/send-sms', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, message }),
-        });
-        const data = await res.json();
-
-        if (res.ok) {
-          showToast('تم إرسال الرسالة بنجاح ✓', 'success');
-          addSmsLogEntry({ name: phone, message, success: true });
-          document.getElementById('smsMessage').value = '';
-          document.getElementById('smsCharCount').textContent = '0 / 320';
-        } else {
-          showToast(data.error || 'فشل إرسال الرسالة', 'error');
-          addSmsLogEntry({ name: phone, message, success: false });
-        }
-      } catch (err) {
-        showToast('حدث خطأ أثناء الإرسال', 'error');
-      } finally {
-        btn.disabled = false;
-      }
-    }
-
-    // ── Send to multiple subscribers ──
-    async function sendSmsBulk(message) {
-      if (smsSelectedIds.size === 0) return showToast('يرجى اختيار مشترك واحد على الأقل', 'error');
-
-      const selected = smsAllSubscribers.filter(s => smsSelectedIds.has(s.id));
-      const total    = selected.length;
-
-      // Show progress overlay
-      const overlay  = document.getElementById('smsBulkProgress');
-      const fill     = document.getElementById('smsBulkProgressFill');
-      const text     = document.getElementById('smsBulkProgressText');
-      overlay.style.display = 'flex';
-      fill.style.width = '0%';
-      text.textContent = `0 / ${total}`;
-
-      let successCount = 0;
-      let failCount    = 0;
-
-      for (let i = 0; i < total; i++) {
-        const sub = selected[i];
-        try {
-          const res = await authenticatedFetch('/api/subscribers/send-sms', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ phone: sub.phone, message }),
-          });
-          if (res.ok) successCount++;
-          else         failCount++;
-        } catch {
-          failCount++;
-        }
-
-        const pct = Math.round(((i + 1) / total) * 100);
-        fill.style.width = `${pct}%`;
-        text.textContent = `${i + 1} / ${total}`;
-
-        // Small delay to avoid rate limiting
-        if (i < total - 1) await new Promise(r => setTimeout(r, 300));
-      }
-
-      overlay.style.display = 'none';
-
-      const summary = `تم إرسال ${successCount} رسالة بنجاح${failCount > 0 ? ` وفشل ${failCount}` : ''}`;
-      showToast(summary, successCount > 0 ? 'success' : 'error');
-
-      addSmsLogEntry({
-        name:    `إرسال جماعي`,
-        message,
-        success: successCount > 0,
-        bulk:    true,
-        count:   successCount,
-      });
-
-      document.getElementById('smsMessage').value = '';
-      document.getElementById('smsCharCount').textContent = '0 / 320';
-      smsSelectedIds.clear();
-      renderSmsRecipientsList();
-      updateSmsSendBtn();
-    }
-
-    // ── Init (call this inside your DOMContentLoaded / setupNewFeatureListeners) ──
-    function initSmsSection() {
-      // Form submit
-      const form = document.getElementById('smsForm');
-      if (form) form.addEventListener('submit', handleSmsSubmit);
-
-      // Char counter
-      setupSmsCharCounter();
-
-      // Subscriber search autocomplete
-      const searchInput = document.getElementById('smsSubscriberSearch');
-      if (searchInput) {
-        searchInput.addEventListener('input', () => {
-          showSmsSuggestions(searchInput.value);
-        });
-      }
-
-      // Close suggestions on outside click
-      document.addEventListener('click', e => {
-        if (!e.target.closest('.sms-search-wrapper')) {
-          const suggestions = document.getElementById('smsSuggestions');
-          if (suggestions) {
-            suggestions.classList.remove('open');
-            suggestions.style.display = 'none';
-          }
-        }
-      });
-    }
-
-    // ── Updated showSmsSuggestions (works with new markup) ──
-    function showSmsSuggestions(query) {
-      const suggestions = document.getElementById('smsSuggestions');
-      if (!suggestions) return;
-
-      if (!query || query.length < 1) {
-        suggestions.classList.remove('open');
-        suggestions.innerHTML = '';
-        return;
-      }
-
-      const lower = query.toLowerCase();
-      const matches = allSubscribers
-        .filter(s => s.phone && (
-          (s.fullName  || '').toLowerCase().includes(lower) ||
-          (s.phone     || '').toLowerCase().includes(lower) ||
-          (s.username  || '').toLowerCase().includes(lower)
-        ))
-        .slice(0, 25);
-
-      if (!matches.length) {
-        suggestions.classList.remove('open');
-        suggestions.innerHTML = '';
-        return;
-      }
-
-      suggestions.innerHTML = matches.map(s => `
-        <li onclick="selectSmsRecipient(${JSON.stringify({ fullName: s.fullName, phone: s.phone }).replace(/\"/g, '&quot;')})">
-          <span class="suggestion-name">${escapeHtml(s.fullName || s.username || '-')}</span>
-          <span class="suggestion-phone">${escapeHtml(s.phone)}</span>
-        </li>`).join('');
-
-      suggestions.classList.add('open');
-      suggestions.style.display = '';
-    }
-
-    // ── Updated selectSmsRecipient ──
-    function selectSmsRecipient(item) {
-      document.getElementById('smsSubscriberSearch').value = item.fullName || item.phone;
-      document.getElementById('smsSelectedPhone').value    = item.phone;
-      const suggestions = document.getElementById('smsSuggestions');
-      suggestions.classList.remove('open');
-      suggestions.innerHTML = '';
-    }
+// Initialize dashboard
+document.addEventListener("DOMContentLoaded", () => {
+  setupEventListeners();
+  loadStats();
+  addQuickFilters(); // Add quick filter buttons
 });
 
 // Handle hash change
@@ -3743,8 +3493,8 @@ async function handleSmsSubmit(e) {
     const hiddenPhone = document.getElementById("smsSelectedPhone");
     const customPhoneInput = document.getElementById("smsCustomPhone");
     const recipientType =
-      document.querySelector('input[name="smsRecipientType"]:checked')?.value ||
-      "subscriber";
+      document.querySelector('input[name="smsRecipientType"]:checked')
+        ?.value || "subscriber";
     const messageEl = document.getElementById("smsMessage");
     if (!hiddenPhone || !messageEl) return;
 

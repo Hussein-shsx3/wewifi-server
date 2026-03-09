@@ -126,179 +126,83 @@
 
           <!-- Analytics Section -->
           <div class="analytics-section">
-            <!-- SMS Section (V2) -->
-            <section id="sms" class="section sms-section">
-              <div class="sms-page-header">
-                <div class="sms-page-title">
-                  <div class="sms-title-icon"><i class="fas fa-comment-sms"></i></div>
-                  <div>
-                    <h2>إرسال رسائل SMS</h2>
-                    <p class="sms-page-subtitle">أرسل رسائل فردية أو جماعية لمشتركيك بسهولة</p>
+            <!-- Speed Distribution - Donut Chart -->
+            <div class="analytics-card">
+              <div class="card-header">
+                <h3><i class="fas fa-tachometer-alt"></i> توزيع السرعات</h3>
+                <span class="card-badge">هذا الشهر</span>
+              </div>
+              <div class="card-body">
+                <div class="donut-chart-container">
+                  <div class="donut-chart-wrapper">
+                    <canvas id="speedDonutChart" width="180" height="180"></canvas>
+                    <div class="donut-center-text">
+                      <span class="donut-total" id="speedDonutTotal">0</span>
+                      <span class="donut-total-label">إجمالي</span>
+                    </div>
+                  </div>
+                  <div class="donut-legend">
+                    <div class="legend-item">
+                      <span class="legend-dot" style="background: #f5a623;"></span>
+                      <span class="legend-label">4 ميجا</span>
+                      <span class="legend-value" id="speed4mCount">0</span>
+                    </div>
+                    <div class="legend-item">
+                      <span class="legend-dot" style="background: #0891b2;"></span>
+                      <span class="legend-label">8 ميجا</span>
+                      <span class="legend-value" id="speed8mCount">0</span>
+                    </div>
                   </div>
                 </div>
-                <div class="sms-provider-pill">
-                  <span class="sms-provider-dot"></span>
-                  TweetSMS · حتى 320 حرف
+                <!-- Hidden bars for backward compatibility -->
+                <div style="display:none;">
+                  <div id="speed4mBar"></div>
+                  <div id="speed8mBar"></div>
                 </div>
               </div>
+            </div>
 
-              <div class="sms-layout-v2">
-
-                <!-- ─── LEFT: Compose Panel ─── -->
-                <div class="sms-compose-panel">
-
-                  <!-- Mode Toggle -->
-                  <div class="sms-mode-tabs">
-                    <button class="sms-mode-tab active" id="singleModeTab" onclick="switchSmsMode('single')">
-                      <i class="fas fa-user"></i> مشترك واحد
-                    </button>
-                    <button class="sms-mode-tab" id="bulkModeTab" onclick="switchSmsMode('bulk')">
-                      <i class="fas fa-users"></i> إرسال جماعي
-                      <span class="sms-bulk-badge" id="smsBulkBadge" style="display:none;">0</span>
-                    </button>
-                  </div>
-
-                  <form id="smsForm" class="sms-compose-form">
-
-                    <!-- ── SINGLE MODE ── -->
-                    <div id="smsSingleMode">
-                      <div class="sms-recipient-toggle-v2">
-                        <label class="sms-toggle-label">
-                          <input type="radio" name="smsRecipientType" value="subscriber" checked
-                            onchange="toggleSmsRecipientType()">
-                          <span class="sms-toggle-chip active-chip">
-                            <i class="fas fa-address-book"></i> من المشتركين
-                          </span>
-                        </label>
-                        <label class="sms-toggle-label">
-                          <input type="radio" name="smsRecipientType" value="custom"
-                            onchange="toggleSmsRecipientType()">
-                          <span class="sms-toggle-chip">
-                            <i class="fas fa-keyboard"></i> رقم مخصص
-                          </span>
-                        </label>
-                      </div>
-
-                      <div class="sms-field-group" id="smsSubscriberGroup">
-                        <label class="sms-label">ابحث عن المشترك</label>
-                        <div class="sms-search-wrapper">
-                          <i class="fas fa-search sms-search-icon"></i>
-                          <input type="text" id="smsSubscriberSearch"
-                            placeholder="اكتب الاسم أو رقم الهاتف..." autocomplete="off"
-                            class="sms-input sms-search-input">
-                          <input type="hidden" id="smsSelectedPhone" name="phone">
-                          <ul id="smsSuggestions" class="sms-suggestions" role="listbox"></ul>
-                        </div>
-                        <span class="sms-field-hint">اختر المشترك من القائمة المنسدلة بعد الكتابة</span>
-                      </div>
-
-                      <div class="sms-field-group" id="smsCustomPhoneGroup" style="display:none;">
-                        <label class="sms-label">رقم الجوال</label>
-                        <input type="tel" id="smsCustomPhone" placeholder="0599xxxxxx" class="sms-input">
-                        <span class="sms-field-hint">أي رقم حتى لو لم يكن ضمن قائمة المشتركين</span>
-                      </div>
-                    </div>
-
-                    <!-- ── BULK MODE ── -->
-                    <div id="smsBulkMode" style="display:none;">
-                      <div class="sms-bulk-filters">
-                        <div class="sms-bulk-filter-row">
-                          <div class="sms-field-group" style="flex:1;">
-                            <label class="sms-label">فلترة بالسرعة</label>
-                            <select id="smsBulkSpeedFilter" class="sms-select" onchange="filterSmsRecipients()">
-                              <option value="">الكل</option>
-                              <option value="4">4 ميجا فقط</option>
-                              <option value="8">8 ميجا فقط</option>
-                            </select>
-                          </div>
-                          <div class="sms-field-group" style="flex:2;">
-                            <label class="sms-label">بحث بالاسم أو الهاتف</label>
-                            <input type="text" id="smsBulkSearch" placeholder="ابحث لتضييق القائمة..."
-                              class="sms-input" oninput="filterSmsRecipients()">
-                          </div>
-                        </div>
-
-                        <div class="sms-recipients-list-header">
-                          <label class="sms-check-all-label">
-                            <input type="checkbox" id="smsSelectAll" onchange="toggleAllSmsRecipients(this)">
-                            <span>تحديد الكل</span>
-                          </label>
-                          <span class="sms-selected-count" id="smsSelectedCount">0 محدد</span>
-                        </div>
-
-                        <div class="sms-recipients-list" id="smsRecipientsList">
-                          <div class="sms-list-loading">
-                            <i class="fas fa-circle-notch fa-spin"></i> جاري التحميل...
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- ── Message Composer (shared) ── -->
-                    <div class="sms-message-composer">
-                      <div class="sms-message-header">
-                        <label class="sms-label">نص الرسالة</label>
-                        <div class="sms-char-pill" id="smsCharCount">0 / 320</div>
-                      </div>
-                      <textarea id="smsMessage" name="message" rows="5" maxlength="320" required
-                        class="sms-textarea"
-                        placeholder="اكتب رسالتك هنا... مثال: عزيزي المشترك، تذكير بتجديد اشتراكك في شبكة WeWifi. للتواصل: 05XXXXXXXX"></textarea>
-                      <div class="sms-quick-templates">
-                        <span class="sms-templates-label">قوالب سريعة:</span>
-                        <button type="button" class="sms-tpl-btn" onclick="insertSmsTemplate('renewal')">تذكير تجديد</button>
-                        <button type="button" class="sms-tpl-btn" onclick="insertSmsTemplate('welcome')">ترحيب</button>
-                        <button type="button" class="sms-tpl-btn" onclick="insertSmsTemplate('promo')">عرض خاص</button>
-                      </div>
-                    </div>
-
-                    <!-- ── Send Button ── -->
-                    <button type="submit" class="sms-send-btn" id="smsSendBtn">
-                      <i class="fas fa-paper-plane"></i>
-                      <span id="smsSendBtnText">إرسال الرسالة</span>
-                    </button>
-
-                  </form>
-                </div>
-
-                <!-- ─── RIGHT: Tips + History ─── -->
-                <div class="sms-side-col">
-                  <div class="sms-tips-card">
-                    <div class="sms-tips-header">
-                      <i class="fas fa-lightbulb"></i> نصائح الرسائل
-                    </div>
-                    <ul class="sms-tips-list">
-                      <li><i class="fas fa-check-circle"></i> عرّف بالمُرسل في البداية (مثال: WeWifi)</li>
-                      <li><i class="fas fa-check-circle"></i> اذكر سبب الرسالة بوضوح</li>
-                      <li><i class="fas fa-check-circle"></i> اختم بدعوة للتواصل السريع</li>
-                      <li><i class="fas fa-check-circle"></i> استخدم لغة بسيطة ومباشرة</li>
-                    </ul>
-                  </div>
-
-                  <!-- Recent SMS Log -->
-                  <div class="sms-log-card">
-                    <div class="sms-tips-header">
-                      <i class="fas fa-history"></i> آخر الرسائل المُرسلة
-                    </div>
-                    <div class="sms-log-list" id="smsLogList">
-                      <div class="sms-log-empty">لا توجد رسائل مُرسلة بعد</div>
-                    </div>
-                  </div>
-                </div>
-
+            <!-- Weekly Activity -->
+            <div class="analytics-card">
+              <div class="card-header">
+                <h3><i class="fas fa-chart-bar"></i> نشاط هذا الأسبوع</h3>
               </div>
-
-              <!-- Bulk Send Progress Overlay -->
-              <div class="sms-progress-overlay" id="smsBulkProgress" style="display:none;">
-                <div class="sms-progress-box">
-                  <div class="sms-progress-icon"><i class="fas fa-paper-plane fa-bounce"></i></div>
-                  <h3>جاري إرسال الرسائل...</h3>
-                  <div class="sms-progress-bar-wrap">
-                    <div class="sms-progress-bar-fill" id="smsBulkProgressFill"></div>
+              <div class="card-body">
+                <div class="activity-metrics">
+                  <div class="metric-box">
+                    <div class="metric-icon new-subscribers">
+                      <i class="fas fa-user-plus"></i>
+                    </div>
+                    <div class="metric-info">
+                      <span class="metric-value" id="weekNewSubscribers">0</span>
+                      <span class="metric-label">مشتركين جدد</span>
+                    </div>
                   </div>
-                  <p class="sms-progress-text" id="smsBulkProgressText">0 / 0</p>
-                </div>
-              </div>
-            </section>
+                  <div class="metric-box">
+                    <div class="metric-icon new-usernames">
+                      <i class="fas fa-plus-circle"></i>
+                    </div>
+                    <div class="metric-info">
+                      <span class="metric-value" id="weekAvailableAdded">0</span>
+                      <span class="metric-label">أسماء مضافة</span>
+                    </div>
+                  </div>
+                  <div class="metric-box">
+                    <div class="metric-icon speed-changes">
+                      <i class="fas fa-bolt"></i>
+                    </div>
+                    <div class="metric-info">
+                      <span class="metric-value" id="weekSpeedChanges">0</span>
+                      <span class="metric-label">تغييرات سرعة</span>
+                    </div>
+                  </div>
+                  <div class="metric-box">
+                    <div class="metric-icon username-changes">
+                      <i class="fas fa-sync"></i>
+                    </div>
+                    <div class="metric-info">
+                      <span class="metric-value" id="weekUsernameChanges">0</span>
+                      <span class="metric-label">تغييرات أسماء</span>
                     </div>
                   </div>
                 </div>
