@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة التحكم - إدارة المشتركين</title>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Cairo:wght@400;600;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+
+<body>
+  <div class="container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <img src="/images/logo.png" alt="شعار الشركة" class="logo">
+        <h2>WeWifi</h2>
+      </div>
+
+      <nav class="sidebar-menu">
+        <ul>
+          <li><a href="#dashboard" class="menu-item active" data-section="dashboard">الرئيسية</a></li>
+          <li><a href="#subscribers" class="menu-item" data-section="subscribers">المشتركون</a></li>
+          <li><a href="#expiring-usernames" class="menu-item" data-section="expiring-usernames">انتهاء الصلاحية</a></li>
+          <li><a href="#stopped-subscribers" class="menu-item" data-section="stopped-subscribers">المشتركون
+              المتوقفون</a></li>
+          <li><a href="#available-usernames" class="menu-item" data-section="available-usernames">أسماء مستخدمين
+              متاحة</a></li>
+          <li><a href="#sms" class="menu-item" data-section="sms"><i class="fas fa-comment-sms"></i> رسائل SMS</a></li>
+          <li><a href="#subscriber-profile" class="menu-item profile-menu-item" data-section="subscriber-profile"
+              style="display: none;">ملف المشترك</a></li>
+          <li><a href="/logout" class="menu-item logout">تسجيل الخروج</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Header -->
+      <header class="top-header">
+        <div class="header-left">
+          <button class="menu-toggle" id="menuToggle" aria-label="تبديل القائمة">☰</button>
+          <h1>لوحة تحكم المشتركين</h1>
+        </div>
+        <div class="header-right">
+          <span class="user-info">المسؤول</span>
+        </div>
+      </header>
+
+      <!-- Content Sections -->
+      <div class="content">
+
+        <!-- Dashboard Section -->
+        <section id="dashboard" class="section active">
+          <!-- Dashboard Header -->
+          <div class="dashboard-header">
+            <div class="dashboard-title-group">
+              <h2 class="dashboard-title"><i class="fas fa-chart-line"></i> لوحة التحكم الرئيسية</h2>
+              <p class="dashboard-subtitle">نظرة شاملة وتفصيلية على أداء النظام</p>
+            </div>
+            <div class="dashboard-date-badge">
+              <i class="fas fa-calendar-alt"></i>
+              <span id="currentDate">اليوم</span>
+            </div>
+          </div>
+
+          <!-- KPI Cards Grid -->
+          <div class="kpi-grid">
+            <!-- Total Subscribers Card -->
+            <div class="kpi-card primary-gradient">
+              <div class="kpi-icon-wrapper">
+                <i class="fas fa-users"></i>
+              </div>
+              <div class="kpi-content">
+                <span class="kpi-label">إجمالي المشتركين</span>
+                <h3 class="kpi-value" id="totalSubscribers">0</h3>
+                <span class="kpi-trend" id="newSubscribersWeek">
+                  <i class="fas fa-arrow-up"></i> +0 هذا الأسبوع
+                </span>
+              </div>
+            </div>
+
+            <!-- Available Usernames Card -->
+            <div class="kpi-card success-gradient">
+              <div class="kpi-icon-wrapper">
+                <i class="fas fa-list"></i>
+              </div>
+              <div class="kpi-content">
+                <span class="kpi-label">أسماء مستخدمين متاحة</span>
+                <h3 class="kpi-value" id="availableUsernamesCount">0</h3>
+                <span class="kpi-trend" id="availableAddedWeek">
+                  <i class="fas fa-arrow-up"></i> +0 هذا الأسبوع
+                </span>
+              </div>
+            </div>
+
+            <!-- Expiring Soon Card -->
+            <div class="kpi-card warning-gradient">
+              <div class="kpi-icon-wrapper">
+                <i class="fas fa-exclamation-triangle"></i>
+              </div>
+              <div class="kpi-content">
+                <span class="kpi-label">تنتهي قريباً</span>
+                <h3 class="kpi-value" id="aboutToDisconnectCount">0</h3>
+                <span class="kpi-trend warning-text">خلال 7 أيام</span>
+              </div>
+            </div>
+
+            <!-- Expired Subscriptions Card -->
+            <div class="kpi-card danger-gradient">
+              <div class="kpi-icon-wrapper">
+                <i class="fas fa-times-circle"></i>
+              </div>
+              <div class="kpi-content">
+                <span class="kpi-label">منتهية الصلاحية</span>
+                <h3 class="kpi-value" id="expiredCount">0</h3>
+                <span class="kpi-trend danger-text">تحتاج تجديد فوري</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Analytics Section -->
+          <div class="analytics-section">
+            <!-- Speed Distribution - Donut Chart -->
+            <div class="analytics-card">
+              <div class="card-header">
+                <h3><i class="fas fa-tachometer-alt"></i> توزيع السرعات</h3>
+                <span class="card-badge">هذا الشهر</span>
+              </div>
+              <div class="card-body">
+                <div class="donut-chart-container">
+                  <div class="donut-chart-wrapper">
+                    <canvas id="speedDonutChart" width="180" height="180"></canvas>
+                    <div class="donut-center-text">
+                      <span class="donut-total" id="speedDonutTotal">0</span>
+                      <span class="donut-total-label">إجمالي</span>
+                    </div>
+                  </div>
+                  <div class="donut-legend">
+                    <div class="legend-item">
+                      <span class="legend-dot" style="background: #f5a623;"></span>
+                      <span class="legend-label">4 ميجا</span>
+                      <span class="legend-value" id="speed4mCount">0</span>
+                    </div>
+                    <div class="legend-item">
+                      <span class="legend-dot" style="background: #0891b2;"></span>
+                      <span class="legend-label">8 ميجا</span>
+                      <span class="legend-value" id="speed8mCount">0</span>
+                    </div>
+                  </div>
+                </div>
+                <!-- Hidden bars for backward compatibility -->
+                <div style="display:none;">
+                  <div id="speed4mBar"></div>
+                  <div id="speed8mBar"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Weekly Activity -->
+            <div class="analytics-card">
+              <div class="card-header">
+                <h3><i class="fas fa-chart-bar"></i> نشاط هذا الأسبوع</h3>
+              </div>
+              <div class="card-body">
+                <div class="activity-metrics">
+                  <div class="metric-box">
+                    <div class="metric-icon new-subscribers">
+                      <i class="fas fa-user-plus"></i>
+                    </div>
+                    <div class="metric-info">
+                      <span class="metric-value" id="weekNewSubscribers">0</span>
+                      <span class="metric-label">مشتركين جدد</span>
+                    </div>
+                  </div>
+                  <div class="metric-box">
+                    <div class="metric-icon new-usernames">
+                      <i class="fas fa-plus-circle"></i>
+                    </div>
+                    <div class="metric-info">
+                      <span class="metric-value" id="weekAvailableAdded">0</span>
+                      <span class="metric-label">أسماء مضافة</span>
+                    </div>
+                  </div>
+                  <div class="metric-box">
+                    <div class="metric-icon speed-changes">
+                      <i class="fas fa-bolt"></i>
+                    </div>
+                    <div class="metric-info">
+                      <span class="metric-value" id="weekSpeedChanges">0</span>
+                      <span class="metric-label">تغييرات سرعة</span>
+                    </div>
+                  </div>
+                  <div class="metric-box">
+                    <div class="metric-icon username-changes">
+                      <i class="fas fa-sync"></i>
+                    </div>
+                    <div class="metric-info">
+                      <span class="metric-value" id="weekUsernameChanges">0</span>
+                      <span class="metric-label">تغييرات أسماء</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Details Section -->
+          <div class="details-section">
+            <!-- Available Usernames Status -->
+            <div class="analytics-card">
+              <div class="card-header">
+                <h3><i class="fas fa-hourglass-half"></i> حالة الأسماء المتاحة</h3>
+              </div>
+              <div class="card-body">
+                <div class="status-bars">
+                  <div class="status-bar-item">
+                    <div class="status-bar-header">
+                      <span class="status-label"><i class="fas fa-circle" style="color: #10b981;"></i> كاملة (31
+                        يوم)</span>
+                      <span class="status-count" id="fullDaysCount">0</span>
+                    </div>
+                    <div class="status-bar">
+                      <div class="status-progress full" id="fullDaysProgress"></div>
+                    </div>
+                  </div>
+                  <div class="status-bar-item">
+                    <div class="status-bar-header">
+                      <span class="status-label"><i class="fas fa-circle" style="color: #f59e0b;"></i> متوسطة (15-30
+                        يوم)</span>
+                      <span class="status-count" id="halfDaysCount">0</span>
+                    </div>
+                    <div class="status-bar">
+                      <div class="status-progress half" id="halfDaysProgress"></div>
+                    </div>
+                  </div>
+                  <div class="status-bar-item">
+                    <div class="status-bar-header">
+                      <span class="status-label"><i class="fas fa-circle" style="color: #f97316;"></i> منخفضة (7-14
+                        يوم)</span>
+                      <span class="status-count" id="quarterDaysCount">0</span>
+                    </div>
+                    <div class="status-bar">
+                      <div class="status-progress quarter" id="quarterDaysProgress"></div>
+                    </div>
+                  </div>
+                  <div class="status-bar-item">
+                    <div class="status-bar-header">
+                      <span class="status-label"><i class="fas fa-circle" style="color: #ef4444;"></i> حرجة (أقل من 7
+                        أيام)</span>
+                      <span class="status-count" id="lowDaysCount">0</span>
+                    </div>
+                    <div class="status-bar">
+                      <div class="status-progress low" id="lowDaysProgress"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Recent Changes -->
+            <div class="analytics-card">
+              <div class="card-header">
+                <h3><i class="fas fa-history"></i> آخر التغييرات</h3>
+              </div>
+              <div class="card-body">
+                <div class="recent-changes-list" id="recentSpeedChangesList">
+                  <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <p>لا توجد تغييرات حديثة</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Expiring Soon -->
+            <div class="analytics-card">
+              <div class="card-header">
+                <h3><i class="fas fa-bell"></i> تحتاج تجديد</h3>
+                <a href="#expiring-usernames" class="see-all-link">عرض الكل <i class="fas fa-arrow-left"></i></a>
+              </div>
+              <div class="card-body">
+                <div class="expiring-list" id="aboutToDisconnectList">
+                  <div class="empty-state">
+                    <i class="fas fa-check-circle"></i>
+                    <p>لا توجد اشتراكات تنتهي قريباً 🎉</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Actions Footer -->
+          <div class="quick-actions-footer">
+            <a href="#subscribers" class="action-btn">
+              <i class="fas fa-users-cog"></i>
+              <span>إدارة المشتركين</span>
+            </a>
+            <a href="#available-usernames" class="action-btn">
+              <i class="fas fa-file-list"></i>
+              <span>أسماء المستخدمين</span>
+            </a>
+            <a href="#expiring-usernames" class="action-btn">
+              <i class="fas fa-clock"></i>
+              <span>انتهاء الصلاحية</span>
+            </a>
+            <a href="#stopped-subscribers" class="action-btn">
+              <i class="fas fa-ban"></i>
+              <span>المشتركون المتوقفون</span>
+            </a>
+          </div>
+        </section>
+
+        <!-- SMS Section -->
+        <section id="sms" class="section sms-section">
+          <div class="sms-layout">
+            <div class="sms-card">
+              <div class="section-header sms-header">
+                <div class="sms-header-title">
+                  <h2><i class="fas fa-comment-sms"></i> إرسال رسالة SMS</h2>
+                  <p class="sms-subtitle">ارسل تذكيراً بالتجديد أو رسالة تسويقية للمشتركين بسهولة</p>
+                </div>
+                <div class="sms-meta">
+                  <span class="sms-provider-badge"><i class="fas fa-signal"></i> TweetSMS</span>
+                  <span class="sms-limit-text">حتى 320 حرف لكل رسالة</span>
+                </div>
+              </div>
+
+              <form id="smsForm" class="sms-form">
+                <div class="sms-recipient-toggle">
+                  <label>
+                    <input type="radio" name="smsRecipientType" value="subscriber" checked>
+                    <span>من المشتركين</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="smsRecipientType" value="custom">
+                    <span>رقم آخر</span>
+                  </label>
+                </div>
+
+                <div class="input-group search-group" id="smsSubscriberGroup">
+                  <label for="smsSubscriberSearch">ابحث عن المشترك (بالاسم أو الهاتف)</label>
+                  <div class="search-wrapper">
+                    <input type="text" id="smsSubscriberSearch" placeholder="اكتب اسم المشترك أو رقم الهاتف..."
+                      autocomplete="off">
+                    <input type="hidden" id="smsSelectedPhone" name="phone">
+                    <ul id="smsSuggestions" class="suggestions-list" role="listbox" aria-label="اقتراحات المشتركين"></ul>
+                  </div>
+                  <p class="field-hint">ابدأ بكتابة الاسم أو الرقم، ثم اختر المشترك من القائمة المنسدلة.</p>
+                </div>
+
+                <div class="input-group" id="smsCustomPhoneGroup" style="display: none;">
+                  <label for="smsCustomPhone">رقم الجوال</label>
+                  <input type="tel" id="smsCustomPhone" placeholder="أدخل رقم الجوال يدوياً (مثال: 0599xxxxxx)">
+                  <p class="field-hint">يمكنك إرسال رسالة لأي رقم حتى لو لم يكن ضمن قائمة المشتركين.</p>
+                </div>
+
+                <div class="input-group">
+                  <div class="sms-textarea-header">
+                    <label for="smsMessage">نص الرسالة</label>
+                    <span id="smsCharCount" class="sms-char-counter">0 / 320</span>
+                  </div>
+                  <textarea id="smsMessage" name="message" rows="4" required maxlength="320"
+                    placeholder="اكتب رسالتك هنا بشكل واضح ومختصر..."></textarea>
+                  <p class="field-hint">استخدم لغة بسيطة، واذكر اسم الشبكة ومدة الاشتراك أو العرض إن وجد.</p>
+                </div>
+
+                <div class="form-actions sms-actions">
+                  <button type="submit" class="action-btn primary">
+                    <i class="fas fa-paper-plane"></i>
+                    <span>إرسال الرسالة</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <aside class="sms-side-panel">
+              <h3><i class="fas fa-lightbulb"></i> نصائح للرسائل الناجحة</h3>
+              <ul>
+                <li>عرّف بالمُرسل في بداية الرسالة (مثال: WeWifi).</li>
+                <li>اذكر سبب الرسالة بوضوح مثل تذكير بالتجديد أو عرض جديد.</li>
+                <li>اختم بدعوة لاتصال أو واتساب للتواصل السريع.</li>
+              </ul>
+              <div class="sms-side-note">
+                <i class="fas fa-info-circle"></i>
+                <span>يتم إرسال الرسالة للرقم الذي تختاره من قائمة المشتركين.</span>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <!-- Subscribers Section -->
+        <section id="subscribers" class="section">
+          <div class="section-header">
+            <h2>إدارة المشتركين</h2>
+            <div class="header-buttons">
+              <button class="btn btn-primary modern-btn" id="addSubscriberBtn">
+                إضافة مشترك
+              </button>
+              <button class="btn btn-info modern-btn" id="importExcelBtn" title="استيراد من Excel">
+                استيراد Excel
+              </button>
+              <button class="btn btn-success modern-btn" id="exportExcelBtn" title="تصدير إلى Excel">
+                تصدير Excel
+              </button>
+              <button class="btn btn-warning modern-btn" id="bulkEditBtn" style="display: none;" title="تعديل المحددين">
+                تعديل المحددين
+              </button>
+              <button class="btn btn-danger modern-btn" id="deleteSelectedBtn" style="display: none;"
+                title="حذف المحددين">
+                حذف المحددين (<span id="selectedCount">0</span>)
+              </button>
+              <button class="btn btn-danger modern-btn" id="deleteAllBtn" title="حذف جميع المشتركين">
+                حذف الكل
+              </button>
+            </div>
+          </div>
+
+          <!-- Bulk Edit Modal -->
+          <div id="bulkEditModal" class="modal" style="display: none;">
+            <div class="modal-content">
+              <h3>تعديل المحددين</h3>
+              <p class="modal-info">سيتم تطبيق التغييرات على <span id="bulkEditCount">0</span> مشترك</p>
+              <form id="bulkEditForm">
+                <div class="form-group">
+                  <label for="bulkField">اختر الحقل</label>
+                  <select id="bulkField" required>
+                    <option value="">اختر...</option>
+                    <option value="facilityType">نوع المنشأة</option>
+                    <option value="package">الخط</option>
+
+                    <option value="startDate">التاريخ</option>
+                    <option value="firstContactDate">تاريخ اول اتصال</option>
+                    <option value="speed">السرعة</option>
+                    <option value="notes">ملاحظات</option>
+                  </select>
+                </div>
+                <div class="form-group" id="bulkValueGroup" style="display: none;">
+                  <label for="bulkValue">القيمة الجديدة</label>
+                  <input type="text" id="bulkValue" placeholder="أدخل القيمة الجديدة">
+                  <input type="date" id="bulkValueDate" style="display: none;">
+                </div>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-success modern-btn">تطبيق التعديلات</button>
+                  <button type="button" class="btn btn-secondary modern-btn" id="cancelBulkEdit">إلغاء</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          <!-- Add/Edit Form -->
+          <div id="subscriberForm" class="form-container" style="display: none;">
+            <div class="form-card">
+              <h3 id="formTitle">إضافة مشترك جديد</h3>
+              <form id="subscriberFormElement">
+                <div class="form-group">
+                  <label for="username">اسم المستخدم</label>
+                  <input type="text" id="username" name="username" placeholder="أدخل اسم المستخدم" required>
+                </div>
+
+                <div class="form-group">
+                  <label for="password">كلمة المرور</label>
+                  <input type="password" id="password" name="password" placeholder="أدخل كلمة المرور">
+                </div>
+
+                <div class="form-group">
+                  <label for="fullName">اسم الزبون</label>
+                  <input type="text" id="fullName" name="fullName" placeholder="أدخل اسم الزبون">
+                </div>
+
+                <div class="form-group">
+                  <label for="facilityType">نوع المنشأة</label>
+                  <input type="text" id="facilityType" name="facilityType"
+                    placeholder="أدخل نوع المنشأة (متجر، صيدلية، مطعم...)">
+                </div>
+
+                <div class="form-group">
+                  <label for="phone">رقم الجوال</label>
+                  <input type="tel" id="phone" name="phone" placeholder="أدخل رقم الجوال">
+                </div>
+
+                <div class="form-group">
+                  <label for="package">الخط</label>
+                  <input type="number" id="package" name="package" placeholder="أدخل رقم الخط">
+                </div>
+
+                <div class="form-group">
+                  <label for="startDate">التاريخ</label>
+                  <input type="date" id="startDate" name="startDate">
+                </div>
+
+                <div class="form-group">
+                  <label for="firstContactDate">تاريخ اول اتصال</label>
+                  <input type="date" id="firstContactDate" name="firstContactDate">
+                </div>
+
+                <div class="form-group">
+                  <label for="speed">السرعة (ميجا)</label>
+                  <select id="speed" name="speed">
+                    <option value="4">4 ميجا</option>
+                    <option value="8">8 ميجا</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label for="notes">ملاحظات</label>
+                  <textarea id="notes" name="notes" placeholder="أدخل أي ملاحظات" rows="2"></textarea>
+                </div>
+
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-success modern-btn">
+                    حفظ المشترك
+                  </button>
+                  <button type="button" class="btn btn-secondary modern-btn" id="cancelFormBtn">
+                    إلغاء
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- Search Filters Section -->
+          <div class="filters-section">
+            <div class="filters-header">
+              <h3>البحث والفلترة</h3>
+              <button class="btn btn-secondary modern-btn btn-sm" id="clearFiltersBtn">مسح الفلاتر</button>
+            </div>
+            <div class="filters-grid">
+              <div class="filter-group">
+                <label>بحث عام</label>
+                <input type="text" id="mainSearchInput"
+                  placeholder="بحث في جميع الحقول... (جرب: 'لا هاتف', 'لا تاريخ', 'بيانات ناقصة')">
+              </div>
+              <div class="filter-group">
+                <label>ID</label>
+                <input type="text" class="column-filter" data-column="id" placeholder="بحث بالـ ID (مثل W04-001)">
+              </div>
+              <div class="filter-group">
+                <label>اسم المستخدم</label>
+                <input type="text" class="column-filter" data-column="username" placeholder="بحث باسم المستخدم">
+              </div>
+              <div class="filter-group">
+                <label>اسم الزبون</label>
+                <input type="text" class="column-filter" data-column="fullName" placeholder="بحث باسم الزبون">
+              </div>
+              <div class="filter-group">
+                <label>نوع المنشأة</label>
+                <input type="text" class="column-filter" data-column="facilityType" placeholder="بحث بنوع المنشأة">
+              </div>
+              <div class="filter-group">
+                <label>رقم الجوال</label>
+                <input type="text" class="column-filter" data-column="phone" placeholder="بحث برقم الجوال">
+              </div>
+              <div class="filter-group">
+                <label>الخط</label>
+                <input type="text" class="column-filter" data-column="package" placeholder="بحث بالخط">
+              </div>
+              <div class="filter-group">
+                <label>تاريخ البداية</label>
+                <input type="text" class="column-filter" data-column="startDate" placeholder="بحث بالتاريخ">
+              </div>
+              <div class="filter-group">
+                <label>تاريخ اول اتصال</label>
+                <input type="text" class="column-filter" data-column="firstContactDate"
+                  placeholder="بحث بتاريخ الاتصال">
+              </div>
+              <div class="filter-group">
+                <label>السرعة</label>
+                <select class="column-filter" data-column="speed">
+                  <option value="">الكل</option>
+                  <option value="4">4 ميجا</option>
+                  <option value="8">8 ميجا</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <label>اسم المستخدم القديم</label>
+                <div style="display: flex; gap: 8px;">
+                  <input type="text" id="oldUsernameSearchInput" placeholder="بحث باسم المستخدم القديم..."
+                    style="flex: 1;">
+                  <button class="btn btn-primary modern-btn btn-sm" id="searchOldUsernameBtn">بحث</button>
+                </div>
+              </div>
+            </div>
+            <div id="oldUsernameSearchResult" style="display: none; margin-top: 15px;">
+              <!-- Search results will appear here -->
+            </div>
+          </div>
+
+          <!-- Subscribers Table -->
+          <div class="table-container">
+            <table id="subscribersTable" class="data-table">
+              <thead>
+                <tr>
+                  <th class="checkbox-col"><input type="checkbox" id="selectAllCheckbox" title="تحديد الكل"></th>
+                  <th>ID</th>
+                  <th>اسم المستخدم</th>
+                  <th>كلمة المرور</th>
+                  <th>اسم الزبون</th>
+                  <th>نوع المنشأة</th>
+                  <th>رقم الجوال</th>
+                  <th>الخط</th>
+                  <th>التاريخ</th>
+                  <th>تاريخ اول اتصال</th>
+                  <th>تاريخ الفصل</th>
+                  <th>السرعة</th>
+                  <th>الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="subscribersTableBody">
+                <!-- Populated by JavaScript -->
+              </tbody>
+            </table>
+            <div id="pagination" class="pagination"></div>
+          </div>
+        </section>
+
+        <!-- Expiring Usernames Section -->
+        <section id="expiring-usernames" class="section">
+          <div class="section-header">
+            <h2>🔔 مشتركين تنتهي صلاحية اسم المستخدم قريباً</h2>
+            <div class="header-buttons">
+              <button class="btn btn-primary modern-btn" id="bulkChangeUsernamesBtn" style="display: none;">
+                تغيير أسماء المستخدمين للمحددين (<span id="expiringSelectedCount">0</span>)
+              </button>
+            </div>
+          </div>
+
+          <!-- Speed Filter -->
+          <div class="filters-section" style="margin-bottom: 20px;">
+            <div class="filters-header">
+              <h3>فلترة حسب السرعة</h3>
+            </div>
+            <div class="filters-grid" style="grid-template-columns: repeat(3, auto) 1fr;">
+              <label class="filter-checkbox">
+                <input type="checkbox" id="expiring4MFilter" checked> 4 ميجا
+              </label>
+              <label class="filter-checkbox">
+                <input type="checkbox" id="expiring8MFilter" checked> 8 ميجا
+              </label>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table modern-table">
+              <thead>
+                <tr>
+                  <th class="checkbox-col"><input type="checkbox" id="selectAllExpiringCheckbox" title="تحديد الكل">
+                  </th>
+                  <th>ID</th>
+                  <th>اسم المستخدم</th>
+                  <th>اسم الزبون</th>
+                  <th>رقم الجوال</th>
+                  <th>السرعة</th>
+                  <th>تاريخ الفصل</th>
+                  <th>الأيام المتبقية</th>
+                  <th>الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="expiringUsernamesTableBody">
+                <tr>
+                  <td colspan="9" class="text-center">جاري التحميل...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Bulk Change Usernames Modal -->
+          <div id="bulkChangeUsernamesModal" class="modal-overlay" style="display: none;">
+            <div class="modal-box" style="max-width: 600px;">
+              <h3>تغيير أسماء المستخدمين للمحددين</h3>
+              <p style="margin-bottom: 15px; color: #666;">سيتم تغيير أسماء المستخدمين لـ <span
+                  id="bulkChangeCount">0</span>
+                مشترك من الأسماء المتاحة (كل مشترك سيحصل على اسم بنفس سرعته الحالية)</p>
+
+              <div id="availableCountInfo"
+                style="margin: 15px 0; padding: 10px; background: var(--bg-color); border-radius: 8px;">
+                <p>المشتركين المحددين (4 ميجا): <strong id="selected4MCount">0</strong> - المتاح: <strong
+                    id="available4MCount">0</strong></p>
+                <p>المشتركين المحددين (8 ميجا): <strong id="selected8MCount">0</strong> - المتاح: <strong
+                    id="available8MCount">0</strong></p>
+              </div>
+
+              <div class="modal-actions">
+                <button type="button" class="action-btn primary" onclick="confirmBulkChangeUsernames()">تأكيد
+                  التغيير</button>
+                <button type="button" class="action-btn secondary"
+                  onclick="closeBulkChangeUsernamesModal()">إلغاء</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Stopped Subscribers Section -->
+        <section id="stopped-subscribers" class="section">
+          <div class="section-header">
+            <h2>المشتركون المتوقفون</h2>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table modern-table">
+              <thead>
+                <tr>
+                  <th>الاسم الكامل</th>
+                  <th>اسم المستخدم</th>
+                  <th>الهاتف</th>
+                  <th>السرعة</th>
+                  <th>تاريخ الإيقاف</th>
+                  <th>سبب الإيقاف</th>
+                  <th>الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="stoppedSubscribersTableBody">
+                <!-- Populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Available Usernames Section -->
+        <section id="available-usernames" class="section">
+          <div class="section-header">
+            <h2>إدارة أسماء المستخدمين المتاحة</h2>
+          </div>
+
+          <div class="speed-tabs">
+            <button class="speed-tab active" data-speed="4" onclick="switchSpeedTab(4)">
+              4 ميجا
+              <span class="tab-count" id="count4M">0</span>
+            </button>
+            <button class="speed-tab" data-speed="8" onclick="switchSpeedTab(8)">
+              8 ميجا
+              <span class="tab-count" id="count8M">0</span>
+            </button>
+          </div>
+
+          <div class="speed-content">
+            <div class="speed-actions">
+              <button class="action-btn primary" onclick="showAddAvailableUsernameForm(currentSpeedTab)">
+                إضافة جديد
+              </button>
+              <button class="action-btn success" onclick="showUploadAvailableUsernamesArea(currentSpeedTab)">
+                استيراد Excel
+              </button>
+              <button class="action-btn danger" onclick="deleteAllAvailableUsernamesBySpeed(currentSpeedTab)">
+                حذف الكل
+              </button>
+            </div>
+
+            <!-- 4M Table -->
+            <div class="speed-panel active" id="panel-4m">
+              <table class="modern-table">
+                <thead>
+                  <tr>
+                    <th>اسم المستخدم</th>
+                    <th>كلمة المرور</th>
+                    <th>الأيام المتبقية</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="availableUsernames4MTableBody">
+                </tbody>
+              </table>
+            </div>
+
+            <!-- 8M Table -->
+            <div class="speed-panel" id="panel-8m">
+              <table class="modern-table">
+                <thead>
+                  <tr>
+                    <th>اسم المستخدم</th>
+                    <th>كلمة المرور</th>
+                    <th>الأيام المتبقية</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="availableUsernames8MTableBody">
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Add Form Modal -->
+          <div id="addUsernameModal" class="modal-overlay" style="display: none;">
+            <div class="modal-box">
+              <h3>إضافة اسم مستخدم جديد <span id="modalSpeedLabel">(4 ميجا)</span></h3>
+              <form id="availableUsernameFormElement">
+                <input type="hidden" id="availableUsernameSpeed" value="4">
+                <div class="input-group">
+                  <label>اسم المستخدم</label>
+                  <input type="text" id="availableUsername" name="username" required>
+                </div>
+                <div class="input-group">
+                  <label>كلمة المرور</label>
+                  <input type="text" id="availablePassword" name="password">
+                </div>
+                <div class="modal-actions">
+                  <button type="submit" class="action-btn primary">حفظ</button>
+                  <button type="button" class="action-btn secondary"
+                    onclick="hideAvailableUsernameForm()">إلغاء</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- Upload Area Modal -->
+          <div id="uploadModal" class="modal-overlay" style="display: none;">
+            <div class="modal-box">
+              <h3>استيراد أسماء مستخدمين <span id="uploadSpeedLabel">(4 ميجا)</span></h3>
+              <input type="hidden" id="uploadAvailableUsernamesSpeed" value="4">
+              <div class="upload-drop-zone" id="uploadAvailableUsernamesDropArea"
+                onclick="document.getElementById('availableUsernamesFile').click()">
+                <p>اضغط هنا لاختيار ملف أو اسحب الملف</p>
+                <input type="file" id="availableUsernamesFile" accept=".xlsx,.xls" style="display: none;"
+                  onchange="uploadAvailableUsernamesExcel(this.files)">
+              </div>
+              <div class="upload-hint">
+                <p>الأعمدة المطلوبة: <code>Username</code> و <code>Password</code></p>
+              </div>
+              <div class="modal-actions">
+                <button type="button" class="action-btn secondary"
+                  onclick="hideUploadAvailableUsernamesArea()">إلغاء</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Edit Modal -->
+          <div id="editAvailableUsernameModal" class="modal-overlay" style="display: none;">
+            <div class="modal-box">
+              <h3>تعديل</h3>
+              <form id="editAvailableUsernameForm">
+                <input type="hidden" id="editAvailableUsernameId">
+                <div class="input-group">
+                  <label>اسم المستخدم</label>
+                  <input type="text" id="editAvailableUsernameInput" required>
+                </div>
+                <div class="input-group">
+                  <label>كلمة المرور</label>
+                  <input type="text" id="editAvailablePasswordInput">
+                </div>
+                <div class="modal-actions">
+                  <button type="submit" class="action-btn primary">حفظ</button>
+                  <button type="button" class="action-btn secondary"
+                    onclick="closeEditAvailableUsernameModal()">إلغاء</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- Subscriber Profile Section -->
+        <section id="subscriber-profile" class="section">
+          <div class="profile-header">
+            <div class="profile-header-info">
+              <h2 class="profile-title">ملف المشترك</h2>
+              <span class="profile-id-badge" id="profileIdBadge">-</span>
+            </div>
+            <div class="profile-header-actions">
+              <button class="profile-btn profile-btn-danger" onclick="openStopSubscriberModal()">إيقاف المشترك</button>
+              <button class="profile-btn profile-btn-secondary" onclick="goBackToSubscribers()">العودة
+                للمشتركين</button>
+            </div>
+          </div>
+
+          <!-- Stats Cards -->
+          <div class="profile-stats-grid">
+            <div class="profile-stat-card">
+              <div class="profile-stat-content">
+                <span class="profile-stat-number" id="usageTimerValue">0</span>
+                <span class="profile-stat-unit">يوم</span>
+              </div>
+              <span class="profile-stat-label">مدة الاستخدام</span>
+              <div class="profile-stat-bar usage-bar"></div>
+            </div>
+            <div class="profile-stat-card" id="remainingDaysCard">
+              <div class="profile-stat-content">
+                <span class="profile-stat-number" id="remainingDaysValue">0</span>
+                <span class="profile-stat-unit">يوم</span>
+              </div>
+              <span class="profile-stat-label">المتبقي حتى الفصل</span>
+              <div class="profile-stat-bar remaining-bar"></div>
+            </div>
+            <div class="profile-stat-card">
+              <div class="profile-stat-content">
+                <span class="profile-stat-number" id="profileSpeedDisplay">4</span>
+                <span class="profile-stat-unit">ميجا</span>
+              </div>
+              <span class="profile-stat-label">السرعة</span>
+              <div class="profile-stat-bar speed-bar"></div>
+            </div>
+          </div>
+
+          <div class="profile-main-content">
+            <!-- Left Column - Subscriber Info -->
+            <div class="profile-column profile-column-main">
+              <!-- Subscriber Details Card -->
+              <div class="profile-card">
+                <div class="profile-card-header">
+                  <h3>بيانات المشترك</h3>
+                </div>
+                <form id="profileEditForm">
+                  <input type="hidden" id="profileEditId">
+                  <div class="profile-form-grid">
+                    <div class="profile-form-group">
+                      <label>رقم المشترك</label>
+                      <input type="text" id="profileId" readonly class="profile-input readonly">
+                    </div>
+                    <div class="profile-form-group">
+                      <label>اسم المستخدم</label>
+                      <input type="text" id="profileUsername" name="username" class="profile-input">
+                    </div>
+                    <div class="profile-form-group">
+                      <label>كلمة المرور</label>
+                      <input type="text" id="profilePassword" name="password" class="profile-input">
+                    </div>
+                    <div class="profile-form-group">
+                      <label>اسم الزبون</label>
+                      <input type="text" id="profileFullName" name="fullName" class="profile-input">
+                    </div>
+                    <div class="profile-form-group">
+                      <label>نوع المنشأة</label>
+                      <input type="text" id="profileFacilityType" name="facilityType" class="profile-input"
+                        placeholder="متجر، صيدلية، مطعم...">
+                    </div>
+                    <div class="profile-form-group">
+                      <label>رقم الجوال</label>
+                      <input type="tel" id="profilePhone" name="phone" class="profile-input">
+                    </div>
+                    <div class="profile-form-group">
+                      <label>الخط</label>
+                      <input type="number" id="profilePackage" name="package" class="profile-input"
+                        placeholder="رقم الخط">
+                    </div>
+                    <div class="profile-form-group">
+                      <label>السرعة</label>
+                      <select id="profileSpeed" name="speed" class="profile-select">
+                        <option value="4">4 ميجا</option>
+                        <option value="8">8 ميجا</option>
+                      </select>
+                    </div>
+                    <div class="profile-form-group">
+                      <label>التاريخ</label>
+                      <input type="date" id="profileStartDate" name="startDate" class="profile-input">
+                    </div>
+                    <div class="profile-form-group">
+                      <label>تاريخ اول اتصال</label>
+                      <input type="date" id="profileFirstContactDate" name="firstContactDate" class="profile-input">
+                    </div>
+                    <div class="profile-form-group full-width">
+                      <label>تاريخ الفصل</label>
+                      <input type="date" id="profileDisconnectionDate" readonly class="profile-input readonly"
+                        title="يتم حسابه تلقائياً">
+                    </div>
+                    <div class="profile-form-group full-width">
+                      <label>ملاحظات</label>
+                      <textarea id="profileNotes" name="notes" rows="2" class="profile-textarea"></textarea>
+                    </div>
+                  </div>
+                  <div class="profile-form-actions">
+                    <button type="submit" class="profile-btn profile-btn-primary">حفظ التعديلات</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- Right Column - Actions & History -->
+            <div class="profile-column profile-column-side">
+              <!-- Change Username Card -->
+              <div class="profile-card">
+                <div class="profile-card-header">
+                  <h3>تغيير اسم المستخدم</h3>
+                </div>
+                <div class="profile-card-body">
+                  <div class="profile-form-group">
+                    <label>اسم المستخدم الجديد</label>
+                    <input type="text" id="newUsernameInput" class="profile-input"
+                      placeholder="أدخل اسم المستخدم الجديد">
+                  </div>
+                  <div class="profile-form-group">
+                    <label>كلمة المرور الجديدة</label>
+                    <input type="text" id="newPasswordInput" class="profile-input"
+                      placeholder="أدخل كلمة المرور الجديدة">
+                  </div>
+                  <button type="button" class="profile-btn profile-btn-primary full-width" id="changeUsernameBtn">تغيير
+                    اسم المستخدم</button>
+                  <p class="profile-hint">سيتم حفظ البيانات القديمة في السجل</p>
+                </div>
+              </div>
+
+              <!-- Assign from Available Card -->
+              <div class="profile-card">
+                <div class="profile-card-header">
+                  <h3>تعيين من المتاحة</h3>
+                </div>
+                <div class="profile-card-body">
+                  <div class="profile-form-group">
+                    <label>اختر اسم مستخدم</label>
+                    <select id="availableUsernameSelect" class="profile-select">
+                      <option value="">اختر اسم مستخدم متاح...</option>
+                    </select>
+                  </div>
+                  <button type="button" class="profile-btn profile-btn-success full-width"
+                    id="assignAvailableUsernameBtn">تعيين</button>
+                  <p class="profile-hint">سيتم تغيير السرعة تلقائياً حسب نوع الاسم</p>
+                </div>
+              </div>
+
+              <!-- Username History Card -->
+              <div class="profile-card">
+                <div class="profile-card-header">
+                  <h3>سجل الأسماء السابقة</h3>
+                  <button type="button" class="history-add-btn" id="toggleAddHistoryBtn" title="إضافة سجل يدوي">
+                    <i class="fas fa-plus"></i>
+                  </button>
+                </div>
+
+                <!-- Add History Form (hidden by default) -->
+                <div class="history-add-form" id="addHistoryForm" style="display: none;">
+                  <div class="history-form-row">
+                    <div class="history-form-field">
+                      <label>اسم المستخدم القديم <span class="required">*</span></label>
+                      <input type="text" id="historyOldUsername" placeholder="اسم المستخدم" />
+                    </div>
+                    <div class="history-form-field">
+                      <label>كلمة المرور القديمة</label>
+                      <input type="text" id="historyOldPassword" placeholder="كلمة المرور" />
+                    </div>
+                  </div>
+                  <div class="history-form-row">
+                    <div class="history-form-field">
+                      <label>تاريخ البداية</label>
+                      <input type="date" id="historyStartDate" />
+                    </div>
+                    <div class="history-form-field">
+                      <label>تاريخ النهاية</label>
+                      <input type="date" id="historyEndDate" />
+                    </div>
+                  </div>
+                  <div class="history-form-actions">
+                    <button type="button" class="profile-btn profile-btn-success" id="saveHistoryEntryBtn">
+                      <i class="fas fa-check"></i> حفظ
+                    </button>
+                    <button type="button" class="profile-btn profile-btn-secondary" id="cancelAddHistoryBtn">
+                      إلغاء
+                    </button>
+                  </div>
+                </div>
+
+                <div class="profile-card-body">
+                  <div class="profile-history-list" id="usernameHistoryList">
+                    <div class="profile-history-empty">لا توجد بيانات سابقة</div>
+                  </div>
+                  <!-- Hidden table for backward compatibility -->
+                  <table style="display:none;">
+                    <tbody id="usernameHistoryTableBody"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Speed History Card -->
+              <div class="profile-card">
+                <div class="profile-card-header">
+                  <h3>سجل تغيير السرعة</h3>
+                </div>
+                <div class="profile-card-body">
+                  <div class="profile-history-list" id="speedHistoryList">
+                    <div class="profile-history-empty">لا توجد بيانات سابقة</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Import Excel Modal -->
+  <div id="importExcelModal" class="modal" style="display: none;">
+    <div class="modal-content import-modal-content">
+      <div class="modal-header">
+        <h3>استيراد ملف Excel</h3>
+        <button class="close-modal-btn" onclick="closeImportModal()">×</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Upload Type Selection -->
+        <div class="upload-type-selector">
+          <label class="upload-type-option">
+            <input type="radio" name="uploadType" value="new" checked>
+            <span class="type-card">
+              <strong>استيراد مشتركين جدد</strong>
+              <small>إضافة أو تحديث المشتركين بناءً على اسم المستخدم</small>
+            </span>
+          </label>
+          <label class="upload-type-option">
+            <input type="radio" name="uploadType" value="update">
+            <span class="type-card">
+              <strong>تحديث بيانات الدخول بالـ ID</strong>
+              <small>تحديث اسم المستخدم وكلمة المرور فقط باستخدام ID المشترك</small>
+            </span>
+          </label>
+        </div>
+
+        <div class="upload-info" id="updateInfo" style="display: none;">
+          <div class="info-box">
+            <strong>📋 صيغة ملف التحديث:</strong>
+            <p>يجب أن يحتوي الملف على الأعمدة التالية:</p>
+            <ul>
+              <li><code>ID</code> - رقم المشترك (مطلوب)</li>
+              <li><code>اسم المستخدم</code> أو <code>Username</code> - اسم المستخدم الجديد (اختياري)</li>
+              <li><code>كلمة المرور</code> أو <code>Password</code> - كلمة المرور الجديدة (اختياري)</li>
+              <li><code>التاريخ</code> - التاريخ (اختياري)</li>
+            </ul>
+            <p style="font-size: 12px; color: var(--text-light); margin-top: 10px;">💡 يمكنك تحديث أي حقل أو جميع الحقول
+              معاً</p>
+          </div>
+        </div>
+
+        <div class="upload-container">
+          <div class="upload-area" id="uploadArea">
+            <p>اسحب وأفلت ملف Excel هنا</p>
+            <p class="or-text">أو</p>
+            <input type="file" id="excelFile" name="excelFile" accept=".xlsx,.xls" style="display: none;">
+            <button type="button" class="btn btn-primary modern-btn" id="chooseFileBtn">
+              اختر ملف
+            </button>
+          </div>
+
+          <div id="uploadResult" class="upload-result">
+            <div id="uploadMessage" class="message"></div>
+            <div id="uploadStats" class="stats"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stop Subscriber Modal - Outside main container -->
+  <div id="stopSubscriberModal" class="modal-overlay" style="display: none;">
+    <div class="modal-box">
+      <h3>إيقاف المشترك</h3>
+      <p style="margin-bottom: 15px; color: #666;">هل أنت متأكد من إيقاف هذا المشترك؟ سيتم نقله إلى قسم المشتركين
+        المتوقفين وإعادة اسم المستخدم للأسماء المتاحة.</p>
+      <div class="input-group">
+        <label>سبب الإيقاف (اختياري)</label>
+        <input type="text" id="stopReasonInput" placeholder="مثال: عدم التجديد، طلب العميل...">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="action-btn danger" onclick="confirmStopSubscriber()">تأكيد الإيقاف</button>
+        <button type="button" class="action-btn secondary" onclick="closeStopSubscriberModal()">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Speed Change Username Selection Modal -->
+  <div id="speedChangeUsernameModal" class="modal-overlay" style="display: none;">
+    <div class="modal-box">
+      <h3>اختيار اسم مستخدم جديد</h3>
+      <p style="margin-bottom: 15px; color: #666;">
+        عند تغيير السرعة، يجب اختيار اسم مستخدم جديد للسرعة <strong id="speedChangeSpeedLabel">8 ميجا</strong>.
+        <br>
+        سيتم إرجاع اسم المستخدم الحالي للأسماء المتاحة مع أيامه المتبقية.
+      </p>
+      <div class="input-group">
+        <label>اختر اسم المستخدم الجديد</label>
+        <select id="speedChangeUsernameSelect" class="form-select">
+          <option value="">-- اختر اسم مستخدم --</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="action-btn primary" onclick="confirmSpeedChangeUsername()">تأكيد التغيير</button>
+        <button type="button" class="action-btn secondary" onclick="closeSpeedChangeUsernameModal()">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/dashboard.js"></script>
+</body>
+
+</html>
