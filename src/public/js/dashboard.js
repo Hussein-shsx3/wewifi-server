@@ -1882,11 +1882,7 @@ async function openSubscriberProfile(subscriberId, skipHashChange = false) {
   // Switch to profile section
   switchSection("subscriber-profile");
 
-  // Show profile menu item in sidebar
-  const profileMenuItem = document.querySelector(".profile-menu-item");
-  if (profileMenuItem) {
-    profileMenuItem.style.display = "block";
-  }
+  // Sidebar profile link intentionally removed from UI; do not modify sidebar visibility here
 
   try {
     console.log("Fetching profile data for:", subscriberId);
