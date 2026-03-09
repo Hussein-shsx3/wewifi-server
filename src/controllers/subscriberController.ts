@@ -212,13 +212,13 @@ export const getSubscribers = async (req: Request, res: Response) => {
   }
 };
 
-// Helper function to calculate disconnection date (firstContactDate + 30 days)
+// Helper function to calculate disconnection date (firstContactDate + 31 days)
 const calculateDisconnectionDate = (
   firstContactDate: Date | string | null | undefined,
 ): string | null => {
   if (!firstContactDate) return null;
   const date = new Date(firstContactDate);
-  date.setDate(date.getDate() + 30); // Add 30 days
+  date.setDate(date.getDate() + 32); // Add 32 days (so day 1 + 31 days = day 32)
   return formatDateForMySQL(date);
 };
 
@@ -605,7 +605,7 @@ export const updateSubscriber = async (req: Request, res: Response) => {
       // Only if the username is also changing (user selected a new username)
       if (isUsernameChanging && oldUsername) {
         // Calculate remaining days on old username
-        let remainingDays = 30 - daysUsed;
+        let remainingDays = 31 - daysUsed;
         if (remainingDays < 0) remainingDays = 0;
 
         // The old username keeps its original expiry date
@@ -905,11 +905,9 @@ export const uploadExcel = async (req: Request, res: Response) => {
           "monthlyPrice",
           "Price",
         );
-        // تاريخ بداية الاشتراك - startDate (يأخذ قيمة تاريخ طلب الاشتراك)
+        // تاريخ بداية الاشتراك - startDate
         const startDateStr = getFieldValue(
           row,
-          "تاريخ طلب الاشتراك",
-          "تاريخ الطلب",
           "تاريخ بداية الاشتراك",
           "تاريخ البداية",
           "التاريخ",
@@ -2067,7 +2065,7 @@ export const getAvailableUsernames = async (req: Request, res: Response) => {
     // Process to ensure remainingDays doesn't go negative
     const processedUsernames = (usernames as any[]).map((u) => ({
       ...u,
-      remainingDays: Math.max(0, u.remainingDays || 30),
+      remainingDays: Math.max(0, u.remainingDays || 31),
     }));
 
     res.json({
@@ -2204,113 +2202,6 @@ export const sendSmsMessage = async (req: Request, res: Response) => {
         message: "خطأ في إرسال الرسالة",
         error: error?.message || error,
       });
-  }
-};
-
-// Send SMS to multiple subscribers
-export const sendBulkSms = async (req: Request, res: Response) => {
-  try {
-    const { subscriberIds, message } = req.body;
-
-    if (!subscriberIds || !Array.isArray(subscriberIds) || subscriberIds.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "يرجى تحديد المشتركين",
-      });
-    }
-
-    if (!message || message.trim() === "") {
-      return res.status(400).json({
-        success: false,
-        message: "نص الرسالة مطلوب",
-      });
-    }
-
-    const pool = getPool();
-
-    if (!pool) {
-      return res
-        .status(503)
-        .json({ success: false, message: "Database not available" });
-    }
-
-    // Get subscribers with their phone numbers
-    const [subscribers] = await pool.execute<RowDataPacket[]>(
-      `SELECT id, username, fullName, phone FROM subscribers WHERE id IN (${subscriberIds.map(() => "?").join(",")})`,
-      subscriberIds,
-    );
-
-    if (subscribers.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "لم يتم العثور على مشتركين",
-      });
-    }
-
-    const results = {
-      success: [] as { id: string; phone: string; status: string }[],
-      failed: [] as { id: string; phone: string; error: string }[],
-    };
-
-    // API Key and Sender
-    const apiKey =
-      process.env.TWEETSMS_API_KEY ||
-      "$2y$10$XUXBBOuO5did0BHqKgmX8.69fLL1VCBTgi5pWckxHSrRJJKxRpwxK";
-    const sender = process.env.SMS_SENDER || "WeNet";
-
-    // Send SMS to each subscriber
-    for (const subscriber of subscribers as any[]) {
-      if (!subscriber.phone || subscriber.phone.trim() === "") {
-        results.failed.push({
-          id: subscriber.id,
-          phone: subscriber.phone || "N/A",
-          error: "لا يوجد رقم هاتف",
-        });
-        continue;
-      }
-
-      try {
-        // Normalize phone to international format
-        let normalized = String(subscriber.phone).replace(/[^0-9]/g, "");
-        if (normalized.startsWith("0")) {
-          normalized = `972${normalized.slice(1)}`;
-        }
-
-        const url = `https://www.tweetsms.ps/api.php?comm=sendsms&api_key=${encodeURIComponent(
-          apiKey,
-        )}&to=${encodeURIComponent(normalized)}&message=${encodeURIComponent(
-          message,
-        )}&sender=${encodeURIComponent(sender)}`;
-
-        const response = await axios.get(url, { timeout: 15000 });
-
-        results.success.push({
-          id: subscriber.id,
-          phone: subscriber.phone,
-          status: response.data,
-        });
-      } catch (error: any) {
-        console.error(`Error sending SMS to ${subscriber.phone}:`, error);
-        results.failed.push({
-          id: subscriber.id,
-          phone: subscriber.phone,
-          error: error?.message || "فشل الإرسال",
-        });
-      }
-    }
-
-    res.json({
-      success: true,
-      message: `تم إرسال ${results.success.length} رسالة من أصل ${subscribers.length}`,
-      data: results,
-    });
-  } catch (error) {
-    console.error("Error sending bulk SMS:", error);
-    res.status(500).json({
-      success: false,
-      message: "خطأ في إرسال الرسائل",
-      error,
-    });
   }
 };
 
@@ -2786,24 +2677,6 @@ export const stopSubscriber = async (req: Request, res: Response) => {
 
     const subscriber = subscribers[0];
 
-    // Calculate days used and remaining days
-    let daysUsed = 0;
-    let remainingDays = 30;
-
-    if (subscriber.firstContactDate) {
-      const startDate = new Date(subscriber.firstContactDate);
-      const today = new Date();
-      startDate.setHours(0, 0, 0, 0);
-      today.setHours(0, 0, 0, 0);
-      daysUsed = Math.floor(
-        (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
-      );
-      if (daysUsed < 0) daysUsed = 0;
-      if (daysUsed > 30) daysUsed = 30;
-      remainingDays = 30 - daysUsed;
-      if (remainingDays < 0) remainingDays = 0;
-    }
-
     // Insert into stopped_subscribers
     await pool.execute(
       `INSERT INTO stopped_subscribers 
@@ -2830,14 +2703,9 @@ export const stopSubscriber = async (req: Request, res: Response) => {
     // Add username back to available_usernames if it exists
     if (subscriber.username) {
       try {
-        // Calculate expiry date based on remaining days
-        const expiryDate = remainingDays > 0 
-          ? new Date(Date.now() + remainingDays * 24 * 60 * 60 * 1000)
-          : null;
-
         await pool.execute(
-          "INSERT INTO available_usernames (username, password, speed, firstContactDate, expiryDate) VALUES (?, ?, ?, ?, ?)",
-          [subscriber.username, subscriber.password, subscriber.speed || 4, subscriber.firstContactDate, expiryDate ? formatDateForMySQL(expiryDate) : null],
+          "INSERT INTO available_usernames (username, password, speed) VALUES (?, ?, ?)",
+          [subscriber.username, subscriber.password, subscriber.speed || 4],
         );
       } catch (e) {
         // Username might already exist in available_usernames, ignore
@@ -3221,12 +3089,7 @@ export const searchByOldUsername = async (req: Request, res: Response) => {
 
     // Search in username_history
     const [historyResults] = await pool.execute<RowDataPacket[]>(
-      `SELECT h.*, s.id as subscriberId, s.username as currentUsername, s.fullName, s.phone, s.speed,
-              CASE 
-                WHEN h.usage_start_date IS NOT NULL AND h.usage_end_date IS NOT NULL 
-                THEN CONCAT(DATE(h.usage_start_date), ' إلى ', DATE(h.usage_end_date))
-                ELSE 'غير محدد'
-              END as usage_period
+      `SELECT h.*, s.id as subscriberId, s.username as currentUsername, s.fullName, s.phone, s.speed
        FROM username_history h
        JOIN subscribers s ON h.subscriber_id = s.id
        WHERE h.old_username LIKE ?

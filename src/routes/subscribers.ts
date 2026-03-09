@@ -37,7 +37,6 @@ import {
   updateUsernameHistoryEntry,
   deleteUsernameHistoryEntry,
   sendSmsMessage,
-  sendBulkSms,
 } from "../controllers/subscriberController";
 
 const router = Router();
@@ -96,8 +95,7 @@ router.get("/expiring-usernames", getExpiringUsernames);
 router.post("/bulk-change-usernames", bulkChangeUsernames);
 router.get("/search-old-username", searchByOldUsername);
 
-// SMS routes
+// SMS route
 router.post("/sms", sendSmsMessage);
-router.post("/bulk-sms", sendBulkSms);
 
 export default router;
