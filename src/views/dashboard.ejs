@@ -222,7 +222,7 @@
                 <div class="status-bars">
                   <div class="status-bar-item">
                     <div class="status-bar-header">
-                      <span class="status-label"><i class="fas fa-circle" style="color: #10b981;"></i> كاملة (31
+                      <span class="status-label"><i class="fas fa-circle" style="color: #10b981;"></i> كاملة (30
                         يوم)</span>
                       <span class="status-count" id="fullDaysCount">0</span>
                     </div>
@@ -317,83 +317,178 @@
           </div>
         </section>
 
-        <!-- SMS Section -->
+
         <section id="sms" class="section sms-section">
-          <div class="sms-layout">
-            <div class="sms-card">
-              <div class="section-header sms-header">
-                <div class="sms-header-title">
-                  <h2><i class="fas fa-comment-sms"></i> إرسال رسالة SMS</h2>
-                  <p class="sms-subtitle">ارسل تذكيراً بالتجديد أو رسالة تسويقية للمشتركين بسهولة</p>
-                </div>
-                <div class="sms-meta">
-                  <span class="sms-provider-badge"><i class="fas fa-signal"></i> TweetSMS</span>
-                  <span class="sms-limit-text">حتى 320 حرف لكل رسالة</span>
-                </div>
+          <div class="sms-page-header">
+            <div class="sms-page-title">
+              <div class="sms-title-icon"><i class="fas fa-comment-sms"></i></div>
+              <div>
+                <h2>إرسال رسائل SMS</h2>
+                <p class="sms-page-subtitle">أرسل رسائل فردية أو جماعية لمشتركيك بسهولة</p>
+              </div>
+            </div>
+            <div class="sms-provider-pill">
+              <span class="sms-provider-dot"></span>
+              TweetSMS · حتى 320 حرف
+            </div>
+          </div>
+
+          <div class="sms-layout-v2">
+
+            <!-- ─── LEFT: Compose Panel ─── -->
+            <div class="sms-compose-panel">
+
+              <!-- Mode Toggle -->
+              <div class="sms-mode-tabs">
+                <button class="sms-mode-tab active" id="singleModeTab" onclick="switchSmsMode('single')">
+                  <i class="fas fa-user"></i> مشترك واحد
+                </button>
+                <button class="sms-mode-tab" id="bulkModeTab" onclick="switchSmsMode('bulk')">
+                  <i class="fas fa-users"></i> إرسال جماعي
+                  <span class="sms-bulk-badge" id="smsBulkBadge" style="display:none;">0</span>
+                </button>
               </div>
 
-              <form id="smsForm" class="sms-form">
-                <div class="sms-recipient-toggle">
-                  <label>
-                    <input type="radio" name="smsRecipientType" value="subscriber" checked>
-                    <span>من المشتركين</span>
-                  </label>
-                  <label>
-                    <input type="radio" name="smsRecipientType" value="custom">
-                    <span>رقم آخر</span>
-                  </label>
-                </div>
+              <form id="smsForm" class="sms-compose-form">
 
-                <div class="input-group search-group" id="smsSubscriberGroup">
-                  <label for="smsSubscriberSearch">ابحث عن المشترك (بالاسم أو الهاتف)</label>
-                  <div class="search-wrapper">
-                    <input type="text" id="smsSubscriberSearch" placeholder="اكتب اسم المشترك أو رقم الهاتف..."
-                      autocomplete="off">
-                    <input type="hidden" id="smsSelectedPhone" name="phone">
-                    <ul id="smsSuggestions" class="suggestions-list" role="listbox" aria-label="اقتراحات المشتركين"></ul>
+                <!-- ── SINGLE MODE ── -->
+                <div id="smsSingleMode">
+                  <div class="sms-recipient-toggle-v2">
+                    <label class="sms-toggle-label">
+                      <input type="radio" name="smsRecipientType" value="subscriber" checked
+                        onchange="toggleSmsRecipientType()">
+                      <span class="sms-toggle-chip active-chip">
+                        <i class="fas fa-address-book"></i> من المشتركين
+                      </span>
+                    </label>
+                    <label class="sms-toggle-label">
+                      <input type="radio" name="smsRecipientType" value="custom" onchange="toggleSmsRecipientType()">
+                      <span class="sms-toggle-chip">
+                        <i class="fas fa-keyboard"></i> رقم مخصص
+                      </span>
+                    </label>
                   </div>
-                  <p class="field-hint">ابدأ بكتابة الاسم أو الرقم، ثم اختر المشترك من القائمة المنسدلة.</p>
-                </div>
 
-                <div class="input-group" id="smsCustomPhoneGroup" style="display: none;">
-                  <label for="smsCustomPhone">رقم الجوال</label>
-                  <input type="tel" id="smsCustomPhone" placeholder="أدخل رقم الجوال يدوياً (مثال: 0599xxxxxx)">
-                  <p class="field-hint">يمكنك إرسال رسالة لأي رقم حتى لو لم يكن ضمن قائمة المشتركين.</p>
-                </div>
-
-                <div class="input-group">
-                  <div class="sms-textarea-header">
-                    <label for="smsMessage">نص الرسالة</label>
-                    <span id="smsCharCount" class="sms-char-counter">0 / 320</span>
+                  <div class="sms-field-group" id="smsSubscriberGroup">
+                    <label class="sms-label">ابحث عن المشترك</label>
+                    <div class="sms-search-wrapper">
+                      <i class="fas fa-search sms-search-icon"></i>
+                      <input type="text" id="smsSubscriberSearch" placeholder="اكتب الاسم أو رقم الهاتف..."
+                        autocomplete="off" class="sms-input sms-search-input">
+                      <input type="hidden" id="smsSelectedPhone" name="phone">
+                      <ul id="smsSuggestions" class="sms-suggestions" role="listbox"></ul>
+                    </div>
+                    <span class="sms-field-hint">اختر المشترك من القائمة المنسدلة بعد الكتابة</span>
                   </div>
-                  <textarea id="smsMessage" name="message" rows="4" required maxlength="320"
-                    placeholder="اكتب رسالتك هنا بشكل واضح ومختصر..."></textarea>
-                  <p class="field-hint">استخدم لغة بسيطة، واذكر اسم الشبكة ومدة الاشتراك أو العرض إن وجد.</p>
+
+                  <div class="sms-field-group" id="smsCustomPhoneGroup" style="display:none;">
+                    <label class="sms-label">رقم الجوال</label>
+                    <input type="tel" id="smsCustomPhone" placeholder="0599xxxxxx" class="sms-input">
+                    <span class="sms-field-hint">أي رقم حتى لو لم يكن ضمن قائمة المشتركين</span>
+                  </div>
                 </div>
 
-                <div class="form-actions sms-actions">
-                  <button type="submit" class="action-btn primary">
-                    <i class="fas fa-paper-plane"></i>
-                    <span>إرسال الرسالة</span>
-                  </button>
+                <!-- ── BULK MODE ── -->
+                <div id="smsBulkMode" style="display:none;">
+                  <div class="sms-bulk-filters">
+                    <div class="sms-bulk-filter-row">
+                      <div class="sms-field-group" style="flex:1;">
+                        <label class="sms-label">فلترة بالسرعة</label>
+                        <select id="smsBulkSpeedFilter" class="sms-select" onchange="filterSmsRecipients()">
+                          <option value="">الكل</option>
+                          <option value="4">4 ميجا فقط</option>
+                          <option value="8">8 ميجا فقط</option>
+                        </select>
+                      </div>
+                      <div class="sms-field-group" style="flex:2;">
+                        <label class="sms-label">بحث بالاسم أو الهاتف</label>
+                        <input type="text" id="smsBulkSearch" placeholder="ابحث لتضييق القائمة..." class="sms-input"
+                          oninput="filterSmsRecipients()">
+                      </div>
+                    </div>
+
+                    <div class="sms-recipients-list-header">
+                      <label class="sms-check-all-label">
+                        <input type="checkbox" id="smsSelectAll" onchange="toggleAllSmsRecipients(this)">
+                        <span>تحديد الكل</span>
+                      </label>
+                      <span class="sms-selected-count" id="smsSelectedCount">0 محدد</span>
+                    </div>
+
+                    <div class="sms-recipients-list" id="smsRecipientsList">
+                      <div class="sms-list-loading">
+                        <i class="fas fa-circle-notch fa-spin"></i> جاري التحميل...
+                      </div>
+                    </div>
+                  </div>
                 </div>
+
+                <!-- ── Message Composer (shared) ── -->
+                <div class="sms-message-composer">
+                  <div class="sms-message-header">
+                    <label class="sms-label">نص الرسالة</label>
+                    <div class="sms-char-pill" id="smsCharCount">0 / 320</div>
+                  </div>
+                  <textarea id="smsMessage" name="message" rows="5" maxlength="320" required class="sms-textarea"
+                    placeholder="اكتب رسالتك هنا... مثال: عزيزي المشترك، تذكير بتجديد اشتراكك في شبكة WeWifi. للتواصل: 05XXXXXXXX"></textarea>
+                  <div class="sms-quick-templates">
+                    <span class="sms-templates-label">قوالب سريعة:</span>
+                    <button type="button" class="sms-tpl-btn" onclick="insertSmsTemplate('renewal')">تذكير
+                      تجديد</button>
+                    <button type="button" class="sms-tpl-btn" onclick="insertSmsTemplate('welcome')">ترحيب</button>
+                    <button type="button" class="sms-tpl-btn" onclick="insertSmsTemplate('promo')">عرض خاص</button>
+                  </div>
+                </div>
+
+                <!-- ── Send Button ── -->
+                <button type="submit" class="sms-send-btn" id="smsSendBtn">
+                  <i class="fas fa-paper-plane"></i>
+                  <span id="smsSendBtnText">إرسال الرسالة</span>
+                </button>
+
               </form>
             </div>
 
-            <aside class="sms-side-panel">
-              <h3><i class="fas fa-lightbulb"></i> نصائح للرسائل الناجحة</h3>
-              <ul>
-                <li>عرّف بالمُرسل في بداية الرسالة (مثال: WeWifi).</li>
-                <li>اذكر سبب الرسالة بوضوح مثل تذكير بالتجديد أو عرض جديد.</li>
-                <li>اختم بدعوة لاتصال أو واتساب للتواصل السريع.</li>
-              </ul>
-              <div class="sms-side-note">
-                <i class="fas fa-info-circle"></i>
-                <span>يتم إرسال الرسالة للرقم الذي تختاره من قائمة المشتركين.</span>
+            <!-- ─── RIGHT: Tips + History ─── -->
+            <div class="sms-side-col">
+              <div class="sms-tips-card">
+                <div class="sms-tips-header">
+                  <i class="fas fa-lightbulb"></i> نصائح الرسائل
+                </div>
+                <ul class="sms-tips-list">
+                  <li><i class="fas fa-check-circle"></i> عرّف بالمُرسل في البداية (مثال: WeWifi)</li>
+                  <li><i class="fas fa-check-circle"></i> اذكر سبب الرسالة بوضوح</li>
+                  <li><i class="fas fa-check-circle"></i> اختم بدعوة للتواصل السريع</li>
+                  <li><i class="fas fa-check-circle"></i> استخدم لغة بسيطة ومباشرة</li>
+                </ul>
               </div>
-            </aside>
+
+              <!-- Recent SMS Log -->
+              <div class="sms-log-card">
+                <div class="sms-tips-header">
+                  <i class="fas fa-history"></i> آخر الرسائل المُرسلة
+                </div>
+                <div class="sms-log-list" id="smsLogList">
+                  <div class="sms-log-empty">لا توجد رسائل مُرسلة بعد</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Bulk Send Progress Overlay -->
+          <div class="sms-progress-overlay" id="smsBulkProgress" style="display:none;">
+            <div class="sms-progress-box">
+              <div class="sms-progress-icon"><i class="fas fa-paper-plane fa-bounce"></i></div>
+              <h3>جاري إرسال الرسائل...</h3>
+              <div class="sms-progress-bar-wrap">
+                <div class="sms-progress-bar-fill" id="smsBulkProgressFill"></div>
+              </div>
+              <p class="sms-progress-text" id="smsBulkProgressText">0 / 0</p>
+            </div>
           </div>
         </section>
+
 
         <!-- Subscribers Section -->
         <section id="subscribers" class="section">
@@ -475,8 +570,22 @@
 
                 <div class="form-group">
                   <label for="facilityType">نوع المنشأة</label>
-                  <input type="text" id="facilityType" name="facilityType"
-                    placeholder="أدخل نوع المنشأة (متجر، صيدلية، مطعم...)">
+                  <select id="facilityType" name="facilityType">
+                    <option value="">اختر نوع المنشأة</option>
+                    <option value="متجر">متجر</option>
+                    <option value="صيدلية">صيدلية</option>
+                    <option value="مطعم">مطعم</option>
+                    <option value="مقهى">مقهى</option>
+                    <option value="منزل">منزل</option>
+                    <option value="مكتب">مكتب</option>
+                    <option value="شركة">شركة</option>
+                    <option value="مدرسة">مدرسة</option>
+                    <option value="جامعة">جامعة</option>
+                    <option value="عيادة">عيادة</option>
+                    <option value="مستشفى">مستشفى</option>
+                    <option value="فندق">فندق</option>
+                    <option value="أخرى">أخرى</option>
+                  </select>
                 </div>
 
                 <div class="form-group">
@@ -627,6 +736,9 @@
               <button class="btn btn-primary modern-btn" id="bulkChangeUsernamesBtn" style="display: none;">
                 تغيير أسماء المستخدمين للمحددين (<span id="expiringSelectedCount">0</span>)
               </button>
+              <button class="btn btn-success modern-btn" id="sendSmsToExpiringBtn" style="display: none;">
+                إرسال رسائل للمحددين (<span id="expiringSmsCount">0</span>)
+              </button>
             </div>
           </div>
 
@@ -699,6 +811,11 @@
         <section id="stopped-subscribers" class="section">
           <div class="section-header">
             <h2>المشتركون المتوقفون</h2>
+            <div class="header-buttons">
+              <button class="btn btn-primary modern-btn" id="reactivateWithDependentsBtn" style="display: none;">
+                إعادة تفعيل مع التوابع (<span id="reactivateCount">0</span>)
+              </button>
+            </div>
           </div>
 
           <div class="table-container">
@@ -923,8 +1040,22 @@
                     </div>
                     <div class="profile-form-group">
                       <label>نوع المنشأة</label>
-                      <input type="text" id="profileFacilityType" name="facilityType" class="profile-input"
-                        placeholder="متجر، صيدلية، مطعم...">
+                      <select id="profileFacilityType" name="facilityType" class="profile-select">
+                        <option value="">اختر نوع المنشأة</option>
+                        <option value="متجر">متجر</option>
+                        <option value="صيدلية">صيدلية</option>
+                        <option value="مطعم">مطعم</option>
+                        <option value="مقهى">مقهى</option>
+                        <option value="منزل">منزل</option>
+                        <option value="مكتب">مكتب</option>
+                        <option value="شركة">شركة</option>
+                        <option value="مدرسة">مدرسة</option>
+                        <option value="جامعة">جامعة</option>
+                        <option value="عيادة">عيادة</option>
+                        <option value="مستشفى">مستشفى</option>
+                        <option value="فندق">فندق</option>
+                        <option value="أخرى">أخرى</option>
+                      </select>
                     </div>
                     <div class="profile-form-group">
                       <label>رقم الجوال</label>
