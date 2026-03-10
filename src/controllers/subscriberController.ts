@@ -215,11 +215,46 @@ export const getSubscribers = async (req: Request, res: Response) => {
 
 // Helper function to calculate disconnection date for a 31-day cycle.
 // Business rule: first contact day counts as day 1, so expiry date = start + 30 days.
+const parseAsLocalDate = (
+  value: Date | string | null | undefined,
+): Date | null => {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) return null;
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoMatch) {
+    const year = Number(isoMatch[1]);
+    const month = Number(isoMatch[2]);
+    const day = Number(isoMatch[3]);
+    return new Date(year, month - 1, day);
+  }
+
+  const slashMatch = raw.match(/^(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{4})$/);
+  if (slashMatch) {
+    const day = Number(slashMatch[1]);
+    const month = Number(slashMatch[2]);
+    const year = Number(slashMatch[3]);
+    return new Date(year, month - 1, day);
+  }
+
+  const parsed = new Date(raw);
+  if (isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+};
+
 const calculateDisconnectionDate = (
   firstContactDate: Date | string | null | undefined,
 ): string | null => {
   if (!firstContactDate) return null;
-  const date = new Date(firstContactDate);
+  const date = parseAsLocalDate(firstContactDate);
+  if (!date) return null;
   date.setDate(date.getDate() + 30);
   return formatDateForMySQL(date);
 };
@@ -231,10 +266,14 @@ const getUsageWindow = (
     return { usageStartDate: null, usageEndDate: null, isExpired: false };
   }
 
-  const start = new Date(firstContactDate);
+  const start = parseAsLocalDate(firstContactDate);
+  if (!start) {
+    return { usageStartDate: null, usageEndDate: null, isExpired: false };
+  }
   const cycleEndStr = calculateDisconnectionDate(start);
-  const cycleEnd = cycleEndStr ? new Date(cycleEndStr) : null;
+  const cycleEnd = cycleEndStr ? parseAsLocalDate(cycleEndStr) : null;
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   const usageStartDate = formatDateForMySQL(start);
   let usageEndDate = formatDateForMySQL(today);
@@ -1857,9 +1896,9 @@ export const changeSubscriberUsername = async (req: Request, res: Response) => {
         const firstContactDate = subscriber.firstContactDate
           ? formatDateForMySQL(subscriber.firstContactDate)
           : null;
-        const expiryDate =
-          subscriber.disconnectionDate ||
-          calculateDisconnectionDate(subscriber.firstContactDate);
+        const expiryDate = subscriber.disconnectionDate
+          ? formatDateForMySQL(subscriber.disconnectionDate)
+          : calculateDisconnectionDate(subscriber.firstContactDate);
 
         await pool.execute(
           "INSERT INTO available_usernames (username, password, speed, firstContactDate, expiryDate, isUsed) VALUES (?, ?, ?, ?, ?, FALSE)",
@@ -2136,7 +2175,7 @@ export const getAvailableUsernames = async (req: Request, res: Response) => {
         id, username, password, speed, isUsed, createdAt,
         firstContactDate, expiryDate,
         CASE 
-          WHEN expiryDate IS NOT NULL THEN DATEDIFF(expiryDate, CURDATE())
+          WHEN expiryDate IS NOT NULL THEN DATEDIFF(expiryDate, CURDATE()) + 1
           ELSE 31
         END as remainingDays
       FROM available_usernames WHERE 1=1
@@ -2159,7 +2198,7 @@ export const getAvailableUsernames = async (req: Request, res: Response) => {
     // Process to ensure remainingDays doesn't go negative
     const processedUsernames = (usernames as any[]).map((u) => ({
       ...u,
-      remainingDays: Math.max(0, u.remainingDays || 31),
+      remainingDays: Math.max(0, u.remainingDays ?? 31),
     }));
 
     res.json({
@@ -2282,6 +2321,13 @@ export const sendSmsMessage = async (req: Request, res: Response) => {
     const normalizePhone = (value: unknown): string | null => {
       let normalized = String(value || "").replace(/[^0-9]/g, "");
       if (!normalized) return null;
+
+      // Local mobile numbers sometimes come without leading 0 (e.g. 599xxxxxx).
+      // Normalize to local format first, then convert to international.
+      if (normalized.length === 9 && normalized.startsWith("5")) {
+        normalized = `0${normalized}`;
+      }
+
       if (normalized.startsWith("0")) {
         normalized = `972${normalized.slice(1)}`;
       }
@@ -2748,9 +2794,9 @@ export const assignUsernameToSubscriber = async (
         const firstContactDate = subscriber.firstContactDate
           ? formatDateForMySQL(subscriber.firstContactDate)
           : null;
-        const expiryDate =
-          subscriber.disconnectionDate ||
-          calculateDisconnectionDate(subscriber.firstContactDate);
+        const expiryDate = subscriber.disconnectionDate
+          ? formatDateForMySQL(subscriber.disconnectionDate)
+          : calculateDisconnectionDate(subscriber.firstContactDate);
 
         await pool.execute(
           "INSERT INTO available_usernames (username, password, speed, firstContactDate, expiryDate, isUsed) VALUES (?, ?, ?, ?, ?, FALSE)",
@@ -2951,9 +2997,14 @@ const reactivateStoppedSubscriberById = async (
     }
   }
 
-  // Calculate new disconnection date
-  const today = new Date();
-  const newDisconnectionDate = calculateDisconnectionDate(today);
+  // Keep original cycle dates when reactivating.
+  // Date reset should happen only on username change flows.
+  const preservedFirstContactDate = stopped.firstContactDate
+    ? formatDateForMySQL(stopped.firstContactDate)
+    : null;
+  const preservedDisconnectionDate = stopped.disconnectionDate
+    ? formatDateForMySQL(stopped.disconnectionDate)
+    : calculateDisconnectionDate(preservedFirstContactDate);
 
   // Generate new ID based on package/line number
   let lineNumber = 1;
@@ -2980,8 +3031,8 @@ const reactivateStoppedSubscriberById = async (
       stopped.package,
       stopped.facilityType,
       stopped.startDate,
-      formatDateForMySQL(today), // New firstContactDate
-      newDisconnectionDate,
+      preservedFirstContactDate,
+      preservedDisconnectionDate,
       stopped.speed,
       stopped.notes,
     ],

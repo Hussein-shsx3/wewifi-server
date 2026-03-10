@@ -452,7 +452,7 @@
                     <option value="facilityType">نوع المنشأة</option>
                     <option value="package">الخط</option>
 
-                    <option value="startDate">التاريخ</option>
+                    <option value="startDate">تاريخ طلب الاشتراك</option>
                     <option value="firstContactDate">تاريخ اول اتصال</option>
                     <option value="speed">السرعة</option>
                     <option value="notes">ملاحظات</option>
@@ -512,6 +512,8 @@
                     <option value="محل تصليح">محل تصليح</option>
                     <option value="أخرى">أخرى</option>
                   </select>
+                  <input type="text" id="facilityTypeOther" class="profile-input" placeholder="اكتب نوع المنشأة"
+                    style="display: none; margin-top: 8px;">
                 </div>
 
                 <div class="form-group">
@@ -525,7 +527,7 @@
                 </div>
 
                 <div class="form-group">
-                  <label for="startDate">التاريخ</label>
+                  <label for="startDate">تاريخ طلب الاشتراك</label>
                   <input type="date" id="startDate" name="startDate">
                 </div>
 
@@ -602,8 +604,8 @@
                 <input type="text" class="column-filter" data-column="package" placeholder="بحث بالخط">
               </div>
               <div class="filter-group">
-                <label>تاريخ البداية</label>
-                <input type="text" class="column-filter" data-column="startDate" placeholder="بحث بالتاريخ">
+                <label>تاريخ طلب الاشتراك</label>
+                <input type="text" class="column-filter" data-column="startDate" placeholder="بحث بتاريخ طلب الاشتراك">
               </div>
               <div class="filter-group">
                 <label>تاريخ اول اتصال</label>
@@ -641,7 +643,7 @@
                   <th>نوع المنشأة</th>
                   <th>رقم الجوال</th>
                   <th>الخط</th>
-                  <th>التاريخ</th>
+                  <th>تاريخ طلب الاشتراك</th>
                   <th>تاريخ اول اتصال</th>
                   <th>تاريخ الفصل</th>
                   <th>السرعة</th>
@@ -989,6 +991,8 @@
                         <option value="محل تصليح">محل تصليح</option>
                         <option value="أخرى">أخرى</option>
                       </select>
+                      <input type="text" id="profileFacilityTypeOther" class="profile-input"
+                        placeholder="اكتب نوع المنشأة" style="display: none; margin-top: 8px;">
                     </div>
                     <div class="profile-form-group">
                       <label>رقم الجوال</label>
@@ -1004,16 +1008,18 @@
                       <input type="text" id="profileSpeed" name="speed" class="profile-input readonly" readonly>
                     </div>
                     <div class="profile-form-group">
-                      <label>التاريخ</label>
-                      <input type="date" id="profileStartDate" name="startDate" class="profile-input">
+                      <label>تاريخ طلب الاشتراك</label>
+                      <input type="text" id="profileStartDate" name="startDate" class="profile-input"
+                        placeholder="DD/MM/YYYY">
                     </div>
                     <div class="profile-form-group">
                       <label>تاريخ اول اتصال</label>
-                      <input type="date" id="profileFirstContactDate" name="firstContactDate" class="profile-input">
+                      <input type="text" id="profileFirstContactDate" name="firstContactDate" class="profile-input"
+                        placeholder="DD/MM/YYYY">
                     </div>
                     <div class="profile-form-group full-width">
                       <label>تاريخ الفصل</label>
-                      <input type="date" id="profileDisconnectionDate" readonly class="profile-input readonly"
+                      <input type="text" id="profileDisconnectionDate" readonly class="profile-input readonly"
                         title="يتم حسابه تلقائياً">
                     </div>
                     <div class="profile-form-group full-width">
@@ -1103,7 +1109,7 @@
                   </div>
                   <div class="history-form-row">
                     <div class="history-form-field">
-                      <label>تاريخ البداية</label>
+                      <label>تاريخ طلب الاشتراك</label>
                       <input type="date" id="historyStartDate" />
                     </div>
                     <div class="history-form-field">
@@ -1186,7 +1192,7 @@
               <li><code>ID</code> - رقم المشترك (مطلوب)</li>
               <li><code>اسم المستخدم</code> أو <code>Username</code> - اسم المستخدم الجديد (اختياري)</li>
               <li><code>كلمة المرور</code> أو <code>Password</code> - كلمة المرور الجديدة (اختياري)</li>
-              <li><code>التاريخ</code> - التاريخ (اختياري)</li>
+              <li><code>التاريخ</code> - تاريخ طلب الاشتراك (اختياري)</li>
             </ul>
             <p style="font-size: 12px; color: var(--text-light); margin-top: 10px;">💡 يمكنك تحديث أي حقل أو جميع الحقول
               معاً</p>
