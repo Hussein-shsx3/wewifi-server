@@ -6,6 +6,19 @@ import * as XLSX from "xlsx";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 
 const noDBMode = process.env.NO_DB === "true";
+const SPECIAL_RESET_USERNAME = "5962963140PP";
+const SPECIAL_RESET_SPEED = 16;
+
+const getBoundSpeedForUsername = (
+  username: string | null | undefined,
+  fallbackSpeed: number | string | null | undefined,
+) => {
+  if (String(username || "").trim() === SPECIAL_RESET_USERNAME) {
+    return SPECIAL_RESET_SPEED;
+  }
+  const parsed = Number(fallbackSpeed);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 4;
+};
 
 // Helper function to check if database is available
 const isDBAvailable = () => {
@@ -396,16 +409,14 @@ export const getSubscribersAboutToDisconnect = async (
 export const createSubscriber = async (req: Request, res: Response) => {
   try {
     const {
-      username,
+      availableUsernameId,
       fullName,
       facilityType,
       phone,
-      password,
       package: packageName,
       startDate,
       firstContactDate,
       monthlyPrice,
-      speed,
       notes,
       isSuspended = false,
     } = req.body;
@@ -417,6 +428,34 @@ export const createSubscriber = async (req: Request, res: Response) => {
         .status(503)
         .json({ success: false, message: "Database not available" });
     }
+
+    if (!availableUsernameId) {
+      return res.status(400).json({
+        success: false,
+        message: "يرجى اختيار اسم مستخدم من الأسماء المتاحة",
+      });
+    }
+
+    // Username/password/speed must come from available_usernames.
+    const [availableRows] = await pool.execute<RowDataPacket[]>(
+      "SELECT id, username, password, speed FROM available_usernames WHERE id = ? AND (isUsed = FALSE OR isUsed IS NULL)",
+      [availableUsernameId],
+    );
+
+    if (availableRows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "اسم المستخدم المختار غير متاح حالياً",
+      });
+    }
+
+    const selectedAvailable = availableRows[0];
+    const username = selectedAvailable.username;
+    const password = selectedAvailable.password || null;
+    const speed = getBoundSpeedForUsername(
+      selectedAvailable.username,
+      selectedAvailable.speed,
+    );
 
     // Extract line number from package name (required for ID generation)
     const lineNumber = parseInt(extractPackageNumber(packageName), 10);
@@ -482,6 +521,11 @@ export const createSubscriber = async (req: Request, res: Response) => {
       "SELECT * FROM subscribers WHERE id = ?",
       [generatedId],
     );
+
+    // Remove selected username from available pool after successful insert.
+    await pool.execute("DELETE FROM available_usernames WHERE id = ?", [
+      selectedAvailable.id,
+    ]);
 
     res.status(201).json({
       success: true,
@@ -1661,7 +1705,6 @@ export const bulkUpdate = async (req: Request, res: Response) => {
 export const exportSubscribers = async (req: Request, res: Response) => {
   try {
     const pool = getPool();
-    const isSuspendedExport = req.path.includes("/suspended");
 
     if (!pool) {
       return res
@@ -1669,12 +1712,13 @@ export const exportSubscribers = async (req: Request, res: Response) => {
         .json({ success: false, message: "Database not available" });
     }
 
-    // Get subscribers (filtered by suspended status)
-    const suspendedCondition = isSuspendedExport
-      ? "WHERE isSuspended = TRUE"
-      : "WHERE isSuspended = FALSE";
+    // Export only active subscribers table columns (without legacy extra fields).
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT * FROM subscribers ${suspendedCondition} ORDER BY id ASC`,
+      `SELECT id, username, password, fullName, facilityType, phone, \`package\`,
+              startDate, firstContactDate, disconnectionDate, speed
+       FROM subscribers
+       WHERE isSuspended = FALSE
+       ORDER BY createdAt DESC, id DESC`,
     );
 
     // Prepare data for Excel with Arabic headers
@@ -1683,15 +1727,17 @@ export const exportSubscribers = async (req: Request, res: Response) => {
       "اسم المستخدم": sub.username || "-",
       "كلمة المرور": sub.password || "-",
       "اسم الزبون": sub.fullName || "-",
+      "نوع المنشأة": sub.facilityType || "-",
       "رقم الجوال": sub.phone || "-",
       الخط: sub.package || "-",
-      المبلغ: sub.monthlyPrice || 0,
-      التاريخ: sub.startDate ? formatDateForMySQL(sub.startDate) : "-",
+      "تاريخ طلب الاشتراك": sub.startDate ? formatDateForMySQL(sub.startDate) : "-",
       "تاريخ اول اتصال": sub.firstContactDate
         ? formatDateForMySQL(sub.firstContactDate)
         : "-",
-      الحالة: sub.isActive ? "نشط" : "غير نشط",
-      ملاحظات: sub.notes || "-",
+      "تاريخ الفصل": sub.disconnectionDate
+        ? formatDateForMySQL(sub.disconnectionDate)
+        : "-",
+      السرعة: `${sub.speed || 4} ميجا`,
     }));
 
     // Create workbook and worksheet
@@ -1704,13 +1750,13 @@ export const exportSubscribers = async (req: Request, res: Response) => {
       { wch: 20 }, // اسم المستخدم
       { wch: 15 }, // كلمة المرور
       { wch: 25 }, // اسم الزبون
+      { wch: 20 }, // نوع المنشأة
       { wch: 15 }, // رقم الجوال
       { wch: 15 }, // الخط
-      { wch: 10 }, // المبلغ
-      { wch: 12 }, // التاريخ
+      { wch: 16 }, // تاريخ طلب الاشتراك
       { wch: 15 }, // تاريخ اول اتصال
-      { wch: 10 }, // الحالة
-      { wch: 30 }, // ملاحظات
+      { wch: 14 }, // تاريخ الفصل
+      { wch: 12 }, // السرعة
     ];
 
     XLSX.utils.book_append_sheet(workbook, worksheet, "المشتركين");
@@ -1719,9 +1765,7 @@ export const exportSubscribers = async (req: Request, res: Response) => {
     const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
     // Set headers for file download
-    const fileName = `${isSuspendedExport ? "suspended_" : ""}subscribers_${
-      new Date().toISOString().split("T")[0]
-    }.xlsx`;
+    const fileName = `subscribers_${new Date().toISOString().split("T")[0]}.xlsx`;
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     res.setHeader(
       "Content-Type",
@@ -1766,7 +1810,13 @@ export const getSubscriberProfile = async (req: Request, res: Response) => {
 
     // Get username history
     const [usernameHistory] = await pool.execute<RowDataPacket[]>(
-      "SELECT * FROM username_history WHERE subscriber_id = ? ORDER BY changed_at DESC",
+      `SELECT * FROM username_history
+       WHERE subscriber_id = ?
+       ORDER BY
+         CASE WHEN usage_start_date IS NULL THEN 1 ELSE 0 END ASC,
+         usage_start_date ASC,
+         usage_end_date ASC,
+         changed_at ASC`,
       [id],
     );
 
@@ -1926,7 +1976,10 @@ export const changeSubscriberUsername = async (req: Request, res: Response) => {
       [
         selectedAvailable.username,
         finalPassword,
-        selectedAvailable.speed || 4,
+        getBoundSpeedForUsername(
+          selectedAvailable.username,
+          selectedAvailable.speed,
+        ),
         formatDateForMySQL(today),
         newDisconnectionDate,
         id,
@@ -1944,7 +1997,10 @@ export const changeSubscriberUsername = async (req: Request, res: Response) => {
       data: {
         oldUsername: subscriber.username,
         newUsername: selectedAvailable.username,
-        newSpeed: selectedAvailable.speed || 4,
+        newSpeed: getBoundSpeedForUsername(
+          selectedAvailable.username,
+          selectedAvailable.speed,
+        ),
         firstContactDate: formatDateForMySQL(today),
         disconnectionDate: newDisconnectionDate,
       },
@@ -1972,7 +2028,13 @@ export const getUsernameHistory = async (req: Request, res: Response) => {
     }
 
     const [history] = await pool.execute<RowDataPacket[]>(
-      "SELECT * FROM username_history WHERE subscriber_id = ? ORDER BY changed_at DESC",
+      `SELECT * FROM username_history
+       WHERE subscriber_id = ?
+       ORDER BY
+         CASE WHEN usage_start_date IS NULL THEN 1 ELSE 0 END ASC,
+         usage_start_date ASC,
+         usage_end_date ASC,
+         changed_at ASC`,
       [id],
     );
 
@@ -2008,6 +2070,39 @@ export const addUsernameHistoryEntry = async (req: Request, res: Response) => {
       return res
         .status(400)
         .json({ success: false, message: "اسم المستخدم القديم مطلوب" });
+    }
+
+    if (usage_start_date && usage_end_date) {
+      const start = new Date(usage_start_date);
+      const end = new Date(usage_end_date);
+      if (start > end) {
+        return res.status(400).json({
+          success: false,
+          message: "تاريخ البداية يجب أن يكون قبل أو يساوي تاريخ النهاية",
+        });
+      }
+
+      const [existingRanges] = await pool.execute<RowDataPacket[]>(
+        `SELECT id, usage_start_date, usage_end_date
+         FROM username_history
+         WHERE subscriber_id = ?
+           AND usage_start_date IS NOT NULL
+           AND usage_end_date IS NOT NULL`,
+        [id],
+      );
+
+      const hasOverlap = existingRanges.some((row: any) => {
+        const rowStart = new Date(row.usage_start_date);
+        const rowEnd = new Date(row.usage_end_date);
+        return start <= rowEnd && end >= rowStart;
+      });
+
+      if (hasOverlap) {
+        return res.status(400).json({
+          success: false,
+          message: "فترة الاستخدام تتداخل مع سجل آخر. رجاءً عدل التواريخ.",
+        });
+      }
     }
 
     const [result] = await pool.execute<ResultSetHeader>(
@@ -2065,6 +2160,48 @@ export const updateUsernameHistoryEntry = async (
       return res
         .status(400)
         .json({ success: false, message: "اسم المستخدم القديم مطلوب" });
+    }
+
+    if (usage_start_date && usage_end_date) {
+      const start = new Date(usage_start_date);
+      const end = new Date(usage_end_date);
+      if (start > end) {
+        return res.status(400).json({
+          success: false,
+          message: "تاريخ البداية يجب أن يكون قبل أو يساوي تاريخ النهاية",
+        });
+      }
+
+      const [currentRows] = await pool.execute<RowDataPacket[]>(
+        "SELECT subscriber_id FROM username_history WHERE id = ?",
+        [historyId],
+      );
+
+      if (currentRows.length > 0) {
+        const subscriberId = currentRows[0].subscriber_id;
+        const [existingRanges] = await pool.execute<RowDataPacket[]>(
+          `SELECT id, usage_start_date, usage_end_date
+           FROM username_history
+           WHERE subscriber_id = ?
+             AND id <> ?
+             AND usage_start_date IS NOT NULL
+             AND usage_end_date IS NOT NULL`,
+          [subscriberId, historyId],
+        );
+
+        const hasOverlap = existingRanges.some((row: any) => {
+          const rowStart = new Date(row.usage_start_date);
+          const rowEnd = new Date(row.usage_end_date);
+          return start <= rowEnd && end >= rowStart;
+        });
+
+        if (hasOverlap) {
+          return res.status(400).json({
+            success: false,
+            message: "فترة الاستخدام تتداخل مع سجل آخر. رجاءً عدل التواريخ.",
+          });
+        }
+      }
     }
 
     await pool.execute(
@@ -2814,7 +2951,10 @@ export const assignUsernameToSubscriber = async (
     // Update subscriber with new username, speed and reset firstContactDate/disconnectionDate
     const today = new Date();
     const newDisconnectionDate = calculateDisconnectionDate(today);
-    const newSpeed = availableUsername.speed || 4;
+    const newSpeed = getBoundSpeedForUsername(
+      availableUsername.username,
+      availableUsername.speed,
+    );
 
     await pool.execute(
       "UPDATE subscribers SET username = ?, password = ?, speed = ?, firstContactDate = ?, disconnectionDate = ? WHERE id = ?",
@@ -3232,6 +3372,90 @@ export const getExpiringUsernames = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: "خطأ في جلب المشتركين المنتهية صلاحيتهم",
+      error,
+    });
+  }
+};
+
+// Reset 31-day cycle for the special 16M subscriber only.
+export const resetSpecialSubscriberCycle = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const { id } = req.params;
+    const pool = getPool();
+
+    if (!pool) {
+      return res
+        .status(503)
+        .json({ success: false, message: "Database not available" });
+    }
+
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      "SELECT id, username, isSuspended, firstContactDate, disconnectionDate FROM subscribers WHERE id = ?",
+      [id],
+    );
+
+    if (!rows.length) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Subscriber not found" });
+    }
+
+    const subscriber = rows[0];
+    if (subscriber.username !== SPECIAL_RESET_USERNAME) {
+      return res.status(403).json({
+        success: false,
+        message: "هذا الإجراء مخصص لمشترك خاص فقط",
+      });
+    }
+
+    if (subscriber.isSuspended) {
+      return res.status(400).json({
+        success: false,
+        message: "لا يمكن تنفيذ التجديد لمشترك متوقف",
+      });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const existingEnd = parseAsLocalDate(subscriber.disconnectionDate);
+    let baseEnd = today;
+    if (existingEnd && existingEnd.getTime() > today.getTime()) {
+      baseEnd = existingEnd;
+    }
+
+    // Next cycle starts the day after the current cycle ends.
+    const newFirstContactDate = new Date(baseEnd);
+    newFirstContactDate.setDate(newFirstContactDate.getDate() + 1);
+    const newDisconnectionDate = calculateDisconnectionDate(newFirstContactDate);
+
+    await pool.execute<ResultSetHeader>(
+      "UPDATE subscribers SET firstContactDate = ?, disconnectionDate = ?, speed = ? WHERE id = ?",
+      [
+        formatDateForMySQL(newFirstContactDate),
+        newDisconnectionDate,
+        SPECIAL_RESET_SPEED,
+        subscriber.id,
+      ],
+    );
+
+    res.json({
+      success: true,
+      message: "تم تجديد 31 يوم للمشترك الخاص بنجاح",
+      data: {
+        subscriberId: subscriber.id,
+        firstContactDate: formatDateForMySQL(newFirstContactDate),
+        disconnectionDate: newDisconnectionDate,
+      },
+    });
+  } catch (error) {
+    console.error("Error resetting special subscriber cycle:", error);
+    res.status(500).json({
+      success: false,
+      message: "خطأ في تجديد مدة المشترك الخاص",
       error,
     });
   }

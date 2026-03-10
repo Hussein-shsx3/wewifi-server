@@ -219,6 +219,68 @@ function setFacilityTypeWithCustomSupport(selectId, otherInputId, value) {
   toggleFacilityTypeOther(selectId, otherInputId);
 }
 
+async function loadAvailableUsernamesForAddForm() {
+  const select = document.getElementById("availableUsernameForNewSubscriber");
+  if (!select) return;
+
+  try {
+    const response = await authenticatedFetch("/api/subscribers/available-usernames");
+    const result = await response.json();
+
+    select.innerHTML = '<option value="">اختر اسم مستخدم متاح...</option>';
+
+    if (!result.success || !Array.isArray(result.data) || result.data.length === 0) {
+      return;
+    }
+
+    const bySpeed = { 4: [], 8: [] };
+    result.data.forEach((u) => {
+      const speed = Number(u.speed || 4);
+      if (speed === 8) {
+        bySpeed[8].push(u);
+      } else {
+        bySpeed[4].push(u);
+      }
+    });
+
+    [4, 8].forEach((speed) => {
+      if (!bySpeed[speed].length) return;
+      const group = document.createElement("optgroup");
+      group.label = speed === 4 ? "🔵 4 ميجا" : "🟢 8 ميجا";
+
+      bySpeed[speed].forEach((u) => {
+        const option = document.createElement("option");
+        option.value = String(u.id);
+        option.dataset.password = String(u.password || "");
+        option.dataset.speed = String(u.speed || speed);
+        option.textContent = `${u.username} (${u.remainingDays ?? 31} يوم متبقي)`;
+        group.appendChild(option);
+      });
+
+      select.appendChild(group);
+    });
+  } catch (error) {
+    console.error("Error loading usernames for add form:", error);
+  }
+}
+
+function handleAddSubscriberAvailableUsernameChange() {
+  const select = document.getElementById("availableUsernameForNewSubscriber");
+  const passwordPreview = document.getElementById("newSubscriberPasswordPreview");
+  const speedPreview = document.getElementById("newSubscriberSpeedPreview");
+  if (!select || !passwordPreview || !speedPreview) return;
+
+  const selectedOption = select.options[select.selectedIndex];
+  if (!selectedOption || !select.value) {
+    passwordPreview.value = "";
+    speedPreview.value = "";
+    return;
+  }
+
+  passwordPreview.value = selectedOption.dataset.password || "-";
+  speedPreview.value = `${selectedOption.dataset.speed || 4} ميجا`;
+}
+
 function normalizeSearchValue(value) {
   return String(value || "")
     .toLowerCase()
@@ -344,6 +406,9 @@ function setupEventListeners() {
   document.getElementById("facilityType")?.addEventListener("change", () => {
     toggleFacilityTypeOther("facilityType", "facilityTypeOther");
   });
+  document
+    .getElementById("availableUsernameForNewSubscriber")
+    ?.addEventListener("change", handleAddSubscriberAvailableUsernameChange);
   toggleFacilityTypeOther("facilityType", "facilityTypeOther");
 
   // Delete all button
@@ -1074,10 +1139,13 @@ function displayPagination(pagination) {
 }
 
 // Show add form
-function showAddForm() {
+async function showAddForm() {
   document.getElementById("formTitle").textContent = "إضافة مشترك جديد";
   document.getElementById("subscriberFormElement").reset();
   document.getElementById("subscriberForm").style.display = "block";
+  toggleFacilityTypeOther("facilityType", "facilityTypeOther");
+  await loadAvailableUsernamesForAddForm();
+  handleAddSubscriberAvailableUsernameChange();
 }
 
 // Hide form
@@ -1085,6 +1153,7 @@ function hideForm() {
   document.getElementById("subscriberForm").style.display = "none";
   document.getElementById("subscriberFormElement").reset();
   toggleFacilityTypeOther("facilityType", "facilityTypeOther");
+  handleAddSubscriberAvailableUsernameChange();
 }
 
 // Handle form submit (Add new subscriber only)
@@ -1092,15 +1161,14 @@ async function handleFormSubmit(e) {
   e.preventDefault();
 
   const formData = {
-    username: document.getElementById("username").value,
-    password: document.getElementById("password").value,
+    availableUsernameId: document.getElementById("availableUsernameForNewSubscriber")
+      .value,
     fullName: document.getElementById("fullName").value,
     facilityType: getFacilityTypeValue("facilityType", "facilityTypeOther"),
     phone: document.getElementById("phone").value,
     package: document.getElementById("package").value,
     startDate: document.getElementById("startDate").value,
     firstContactDate: document.getElementById("firstContactDate").value || null,
-    speed: Number(document.getElementById("speed")?.value || 4),
     notes: document.getElementById("notes").value,
   };
 
@@ -1118,6 +1186,10 @@ async function handleFormSubmit(e) {
       alert("يرجى إدخال رقم الخط لتوليد ID تلقائياً");
       return;
     }
+    if (!formData.availableUsernameId) {
+      alert("يرجى اختيار اسم مستخدم من الأسماء المتاحة");
+      return;
+    }
 
     const response = await authenticatedFetch("/api/subscribers", {
       method: "POST",
@@ -1130,6 +1202,8 @@ async function handleFormSubmit(e) {
       // Show newest changes immediately after adding.
       loadSubscribers(1);
       loadStats();
+      loadAvailableUsernames();
+      loadAvailableUsernamesDropdown();
 
       const uploadResult = document.getElementById("uploadResult");
       const uploadMessage = document.getElementById("uploadMessage");
@@ -3257,8 +3331,7 @@ async function saveNewHistoryEntry() {
     const result = await response.json();
     if (result.success) {
       closeAddHistoryForm();
-      // Add the new entry to the DOM directly
-      addHistoryEntryToDOM(result.data);
+      await openSubscriberProfile(subscriberId, true);
       showToast("تم إضافة السجل بنجاح", "success");
     } else {
       showToast(result.message || "خطأ في إضافة السجل", "error");
@@ -3390,13 +3463,7 @@ async function updateHistoryEntry(historyId) {
     const result = await response.json();
     if (result.success) {
       closeAddHistoryForm();
-      // Update the entry in DOM directly
-      updateHistoryEntryInDOM(historyId, {
-        old_username: oldUsername,
-        old_password: oldPassword,
-        usage_start_date: startDate,
-        usage_end_date: endDate,
-      });
+      await openSubscriberProfile(subscriberId, true);
       showToast("تم تحديث السجل بنجاح", "success");
     } else {
       showToast(result.message || "خطأ في تحديث السجل", "error");
@@ -3459,8 +3526,7 @@ function deleteHistoryEntry(historyId) {
 
       const result = await response.json();
       if (result.success) {
-        // Remove from DOM directly with animation
-        removeHistoryEntryFromDOM(historyId);
+        await openSubscriberProfile(subscriberId, true);
         showToast("تم حذف السجل بنجاح", "success");
       } else {
         showToast(result.message || "خطأ في حذف السجل", "error");
@@ -4000,6 +4066,7 @@ async function handleSmsSubmit(e) {
 
 let expiringUsernamesData = [];
 let selectedExpiringIds = new Set();
+const SPECIAL_RESET_USERNAME = "5962963140PP";
 
 function setupExpiringUsernamesListeners() {
   // Select all checkbox
@@ -4117,6 +4184,8 @@ function displayExpiringUsernames(subscribers) {
       }
 
       const isChecked = selectedExpiringIds.has(sub._id) ? "checked" : "";
+      const showSpecialReset =
+        String(sub.username || "").trim() === SPECIAL_RESET_USERNAME;
 
       return `
       <tr data-id="${sub._id}">
@@ -4132,6 +4201,11 @@ function displayExpiringUsernames(subscribers) {
         <td><span class="days-badge ${daysClass}">${daysText}</span></td>
         <td>
           <button class="btn btn-info btn-sm modern-btn" onclick="openSubscriberProfile('${sub._id}')">ملف</button>
+          ${
+            showSpecialReset
+              ? `<button class="btn btn-success btn-sm modern-btn" onclick="resetSpecialSubscriberCycle('${sub._id}')">Reset 31</button>`
+              : ""
+          }
         </td>
       </tr>
     `;
@@ -4139,6 +4213,36 @@ function displayExpiringUsernames(subscribers) {
     .join("");
 
   updateExpiringSelectedCount();
+}
+
+async function resetSpecialSubscriberCycle(subscriberId) {
+  if (!subscriberId) return;
+
+  if (!confirm("تأكيد: سيتم تجديد 31 يوم إضافية لهذا المشترك الخاص. هل تريد المتابعة؟")) {
+    return;
+  }
+
+  try {
+    const response = await authenticatedFetch(
+      `/api/subscribers/expiring-usernames/reset-special/${subscriberId}`,
+      {
+        method: "POST",
+      },
+    );
+    const result = await response.json();
+
+    if (result.success) {
+      showToast("تم تجديد 31 يوم بنجاح", "success");
+      await loadExpiringUsernames();
+      loadSubscribers();
+      loadStats();
+    } else {
+      showToast(result.message || "فشل التجديد", "error");
+    }
+  } catch (error) {
+    console.error("Error resetting special subscriber cycle:", error);
+    showToast("خطأ في تنفيذ التجديد", "error");
+  }
 }
 
 // Handle checkbox change for expiring usernames

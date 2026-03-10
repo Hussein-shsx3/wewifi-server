@@ -31,6 +31,7 @@ import {
   bulkReactivateSubscribers,
   deleteStoppedSubscriber,
   getExpiringUsernames,
+  resetSpecialSubscriberCycle,
   bulkChangeUsernames,
   searchByOldUsername,
   getDashboardStats,
@@ -94,6 +95,7 @@ router.delete("/stopped/:id", deleteStoppedSubscriber);
 
 // Expiring usernames routes
 router.get("/expiring-usernames", getExpiringUsernames);
+router.post("/expiring-usernames/reset-special/:id", resetSpecialSubscriberCycle);
 router.post("/bulk-change-usernames", bulkChangeUsernames);
 router.get("/search-old-username", searchByOldUsername);
 

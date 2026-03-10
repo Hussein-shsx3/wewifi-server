@@ -476,13 +476,12 @@
               <h3 id="formTitle">إضافة مشترك جديد</h3>
               <form id="subscriberFormElement">
                 <div class="form-group">
-                  <label for="username">اسم المستخدم</label>
-                  <input type="text" id="username" name="username" placeholder="أدخل اسم المستخدم" required>
-                </div>
-
-                <div class="form-group">
-                  <label for="password">كلمة المرور</label>
-                  <input type="password" id="password" name="password" placeholder="أدخل كلمة المرور">
+                  <label for="availableUsernameForNewSubscriber">اسم المستخدم (من المتاحة)</label>
+                  <select id="availableUsernameForNewSubscriber" name="availableUsernameId" required>
+                    <option value="">اختر اسم مستخدم متاح...</option>
+                  </select>
+                  <small style="display:block; margin-top:6px; color:#666;">يتم سحب اسم المستخدم وكلمة المرور تلقائياً من
+                    الأسماء المتاحة</small>
                 </div>
 
                 <div class="form-group">
@@ -537,11 +536,15 @@
                 </div>
 
                 <div class="form-group">
-                  <label for="speed">السرعة (ميجا)</label>
-                  <select id="speed" name="speed">
-                    <option value="4">4 ميجا</option>
-                    <option value="8">8 ميجا</option>
-                  </select>
+                  <label for="newSubscriberPasswordPreview">كلمة المرور (تلقائي)</label>
+                  <input type="text" id="newSubscriberPasswordPreview" class="profile-input readonly" readonly
+                    placeholder="تظهر بعد اختيار اسم المستخدم">
+                </div>
+
+                <div class="form-group">
+                  <label for="newSubscriberSpeedPreview">السرعة (تلقائي)</label>
+                  <input type="text" id="newSubscriberSpeedPreview" class="profile-input readonly" readonly
+                    placeholder="تظهر بعد اختيار اسم المستخدم">
                 </div>
 
                 <div class="form-group">
