@@ -1598,6 +1598,7 @@ async function loadStats() {
       // Update recent speed changes
       updateRecentSpeedChanges(data.recentSpeedChanges);
       updateRecentNewSubscribers(data.recentNewSubscribers);
+      updateTodayUsernameChanges(data.todayUsernameChangedSubscribers);
 
       // Update current date
       updateCurrentDate();
@@ -1843,6 +1844,36 @@ function updateRecentNewSubscribers(subscribers) {
       </div>
       <div class="recent-item-detail">${sub.phone || "بدون هاتف"}</div>
       <div class="recent-item-time">${formatDate(sub.createdAt)}</div>
+    </div>
+  `,
+    )
+    .join("");
+}
+
+function updateTodayUsernameChanges(changes) {
+  const listEl = document.getElementById("todayUsernameChangesList");
+  if (!listEl) return;
+
+  if (!changes || changes.length === 0) {
+    listEl.innerHTML = `
+      <div class="empty-state">
+        <i class="fas fa-inbox"></i>
+        <p>لا توجد تغييرات اليوم</p>
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = changes
+    .map(
+      (item) => `
+    <div class="recent-item">
+      <div class="recent-item-title">
+        <i class="fas fa-user-edit"></i>
+        ${item.fullName || item.current_username || "-"}
+      </div>
+      <div class="recent-item-detail">${item.old_username || "-"} → ${item.current_username || "-"}</div>
+      <div class="recent-item-time">${formatDate(item.changed_at)}</div>
     </div>
   `,
     )

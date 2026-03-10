@@ -8,12 +8,15 @@ import { RowDataPacket, ResultSetHeader } from "mysql2";
 const noDBMode = process.env.NO_DB === "true";
 const SPECIAL_RESET_USERNAME = "5962963140PP";
 const SPECIAL_RESET_SPEED = 16;
+const normalizeUsernameKey = (value: string | null | undefined) =>
+  String(value || "").trim().toLowerCase();
+const SPECIAL_RESET_USERNAME_KEY = normalizeUsernameKey(SPECIAL_RESET_USERNAME);
 
 const getBoundSpeedForUsername = (
   username: string | null | undefined,
   fallbackSpeed: number | string | null | undefined,
 ) => {
-  if (String(username || "").trim() === SPECIAL_RESET_USERNAME) {
+  if (normalizeUsernameKey(username) === SPECIAL_RESET_USERNAME_KEY) {
     return SPECIAL_RESET_SPEED;
   }
   const parsed = Number(fallbackSpeed);
@@ -1113,6 +1116,7 @@ export const uploadExcel = async (req: Request, res: Response) => {
             speed = 8;
           }
         }
+        speed = getBoundSpeedForUsername(username, speed);
 
         // All other fields are optional - use default values if not provided
         const finalPassword = password || "";
@@ -1261,7 +1265,7 @@ export const uploadExcel = async (req: Request, res: Response) => {
 
             // Always update speed based on notes
             updateFields.push("speed = ?");
-            updateValues.push(speed);
+            updateValues.push(getBoundSpeedForUsername(username, speed));
 
             updateValues.push(username);
 
@@ -1349,7 +1353,7 @@ export const uploadExcel = async (req: Request, res: Response) => {
             true,
             finalIsSuspended,
             notes || null,
-            speed,
+            getBoundSpeedForUsername(username, speed),
           ],
         );
 
@@ -3404,7 +3408,7 @@ export const resetSpecialSubscriberCycle = async (
     }
 
     const subscriber = rows[0];
-    if (subscriber.username !== SPECIAL_RESET_USERNAME) {
+    if (normalizeUsernameKey(subscriber.username) !== SPECIAL_RESET_USERNAME_KEY) {
       return res.status(403).json({
         success: false,
         message: "هذا الإجراء مخصص لمشترك خاص فقط",
@@ -3790,6 +3794,21 @@ export const getDashboardStats = async (req: Request, res: Response) => {
        LIMIT 5`,
     );
 
+    // Subscribers with username changes today
+    const [todayUsernameChangedSubscribers] = await pool.execute<RowDataPacket[]>(
+      `SELECT h.subscriber_id as id, h.old_username, h.changed_at,
+              s.username as current_username, s.fullName, s.phone
+       FROM username_history h
+       LEFT JOIN subscribers s ON s.id = h.subscriber_id
+       WHERE DATE(h.changed_at) >= DATE_SUB(CURDATE(), INTERVAL 1 DAY)
+         AND s.id IS NOT NULL
+         AND COALESCE(TRIM(h.old_username), '') <> ''
+         AND h.old_username <> s.username
+         AND (h.usage_start_date IS NULL OR h.usage_start_date < CURDATE())
+       ORDER BY h.changed_at DESC
+       LIMIT 10`,
+    );
+
     // Daily new subscribers for last 7 days (for chart)
     const [dailyNewSubscribers] = await pool.execute<RowDataPacket[]>(
       `SELECT DATE(createdAt) as date, COUNT(*) as count 
@@ -3847,6 +3866,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         facilityTypes: facilityResult,
         recentSpeedChanges: recentSpeedChanges,
         recentNewSubscribers: recentNewSubscribers,
+        todayUsernameChangedSubscribers: todayUsernameChangedSubscribers,
         charts: {
           dailyNewSubscribers: dailyNewSubscribers,
           dailyAvailableAdded: dailyAvailableAdded,
