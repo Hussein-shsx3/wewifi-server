@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import axios from "axios";
 import { getPool } from "../config/database";
-import { ISubscriber, formatDateForMySQL } from "../models/Subscriber";
+import { formatDateForMySQL } from "../models/Subscriber";
 import * as XLSX from "xlsx";
 import { RowDataPacket, ResultSetHeader } from "mysql2";
 
@@ -180,8 +180,9 @@ export const getSubscribers = async (req: Request, res: Response) => {
       countQuery += ` WHERE ${suspendedCondition}`;
     }
 
+    // Show newest subscribers first so fresh additions appear immediately.
     // Use string interpolation for LIMIT/OFFSET (safe because we validated as numbers)
-    query += ` ORDER BY id ASC LIMIT ${limitNum} OFFSET ${offset}`;
+    query += ` ORDER BY createdAt DESC, id DESC LIMIT ${limitNum} OFFSET ${offset}`;
 
     // Use pool.query() instead of pool.execute() to avoid prepared statement issues
     const [rows] = await pool.query<RowDataPacket[]>(query, params);
@@ -212,14 +213,40 @@ export const getSubscribers = async (req: Request, res: Response) => {
   }
 };
 
-// Helper function to calculate disconnection date (firstContactDate + 31 days)
+// Helper function to calculate disconnection date for a 31-day cycle.
+// Business rule: first contact day counts as day 1, so expiry date = start + 30 days.
 const calculateDisconnectionDate = (
   firstContactDate: Date | string | null | undefined,
 ): string | null => {
   if (!firstContactDate) return null;
   const date = new Date(firstContactDate);
-  date.setDate(date.getDate() + 32); // Add 32 days (so day 1 + 31 days = day 32)
+  date.setDate(date.getDate() + 30);
   return formatDateForMySQL(date);
+};
+
+const getUsageWindow = (
+  firstContactDate: Date | string | null | undefined,
+): { usageStartDate: string | null; usageEndDate: string | null; isExpired: boolean } => {
+  if (!firstContactDate) {
+    return { usageStartDate: null, usageEndDate: null, isExpired: false };
+  }
+
+  const start = new Date(firstContactDate);
+  const cycleEndStr = calculateDisconnectionDate(start);
+  const cycleEnd = cycleEndStr ? new Date(cycleEndStr) : null;
+  const today = new Date();
+
+  const usageStartDate = formatDateForMySQL(start);
+  let usageEndDate = formatDateForMySQL(today);
+  let isExpired = false;
+
+  if (cycleEnd) {
+    const end = today > cycleEnd ? cycleEnd : today;
+    usageEndDate = formatDateForMySQL(end);
+    isExpired = today > cycleEnd;
+  }
+
+  return { usageStartDate, usageEndDate, isExpired };
 };
 
 // Helper function to extract number from package/line string
@@ -387,7 +414,7 @@ export const createSubscriber = async (req: Request, res: Response) => {
       }
     }
 
-    // Calculate disconnection date (firstContactDate + 32 days)
+    // Calculate disconnection date for the 31-day cycle (inclusive counting)
     const disconnectionDate = calculateDisconnectionDate(firstContactDate);
 
     const [result] = await pool.execute<ResultSetHeader>(
@@ -435,6 +462,14 @@ export const updateSubscriber = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const updates = req.body;
+    // Username and speed are tied to dedicated username-change flows only.
+    if (updates && Object.prototype.hasOwnProperty.call(updates, "username")) {
+      delete updates.username;
+    }
+    // Speed is tied to username. Direct speed edits are not allowed from profile edit.
+    if (updates && Object.prototype.hasOwnProperty.call(updates, "speed")) {
+      delete updates.speed;
+    }
     const pool = getPool();
 
     if (!pool) {
@@ -1727,7 +1762,7 @@ export const getSubscriberProfile = async (req: Request, res: Response) => {
 export const changeSubscriberUsername = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { newUsername, newPassword } = req.body;
+    const { newUsername, newPassword, targetSpeed } = req.body;
     const pool = getPool();
 
     if (!pool) {
@@ -1744,7 +1779,7 @@ export const changeSubscriberUsername = async (req: Request, res: Response) => {
 
     // Get current subscriber data
     const [subscribers] = await pool.execute<RowDataPacket[]>(
-      "SELECT id, username, password, firstContactDate FROM subscribers WHERE id = ?",
+      "SELECT id, username, password, speed, firstContactDate, disconnectionDate FROM subscribers WHERE id = ?",
       [id],
     );
 
@@ -1755,6 +1790,12 @@ export const changeSubscriberUsername = async (req: Request, res: Response) => {
     }
 
     const subscriber = subscribers[0];
+    if (subscriber.username === newUsername) {
+      return res.status(400).json({
+        success: false,
+        message: "اسم المستخدم الجديد هو نفس الحالي",
+      });
+    }
 
     // Check if new username is already in use
     const [existing] = await pool.execute<RowDataPacket[]>(
@@ -1768,13 +1809,31 @@ export const changeSubscriberUsername = async (req: Request, res: Response) => {
         .json({ success: false, message: "Username already in use" });
     }
 
-    // Calculate dates for history record
-    const usageStartDate = subscriber.firstContactDate
-      ? formatDateForMySQL(subscriber.firstContactDate)
-      : null;
-    const usageEndDate = subscriber.firstContactDate
-      ? calculateDisconnectionDate(subscriber.firstContactDate)
-      : null;
+    // New username must come from available_usernames so speed is tied to username speed.
+    const [availableRows] = await pool.execute<RowDataPacket[]>(
+      "SELECT id, username, password, speed FROM available_usernames WHERE username = ? AND (isUsed = FALSE OR isUsed IS NULL)",
+      [newUsername],
+    );
+    if (availableRows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "اسم المستخدم الجديد غير متاح. اختر اسماً من الأسماء المتاحة.",
+      });
+    }
+    const selectedAvailable = availableRows[0];
+    if (
+      targetSpeed !== undefined &&
+      Number(targetSpeed) !== Number(selectedAvailable.speed || 4)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "السرعة المطلوبة لا تطابق سرعة اسم المستخدم المختار",
+      });
+    }
+
+    const { usageStartDate, usageEndDate, isExpired } = getUsageWindow(
+      subscriber.firstContactDate,
+    );
 
     // Save old username to history with usage dates
     await pool.execute(
@@ -1788,32 +1847,67 @@ export const changeSubscriberUsername = async (req: Request, res: Response) => {
       ],
     );
 
-    // Delete the new username from available_usernames if it exists there
-    await pool.execute("DELETE FROM available_usernames WHERE username = ?", [
-      newUsername,
-    ]);
+    // If old username still has remaining days, return it to available_usernames.
+    if (subscriber.username && !isExpired) {
+      const [existingAvailable] = await pool.execute<RowDataPacket[]>(
+        "SELECT id FROM available_usernames WHERE username = ?",
+        [subscriber.username],
+      );
+      if (existingAvailable.length === 0) {
+        const firstContactDate = subscriber.firstContactDate
+          ? formatDateForMySQL(subscriber.firstContactDate)
+          : null;
+        const expiryDate =
+          subscriber.disconnectionDate ||
+          calculateDisconnectionDate(subscriber.firstContactDate);
 
-    // Update subscriber with new username
-    const updateFields = ["username = ?"];
-    const updateValues: any[] = [newUsername];
-
-    if (newPassword) {
-      updateFields.push("password = ?");
-      updateValues.push(newPassword);
+        await pool.execute(
+          "INSERT INTO available_usernames (username, password, speed, firstContactDate, expiryDate, isUsed) VALUES (?, ?, ?, ?, ?, FALSE)",
+          [
+            subscriber.username,
+            subscriber.password || null,
+            subscriber.speed || 4,
+            firstContactDate,
+            expiryDate,
+          ],
+        );
+      }
     }
 
-    updateValues.push(id);
+    // Update subscriber with selected username/speed and start a fresh 31-day cycle.
+    const today = new Date();
+    const newDisconnectionDate = calculateDisconnectionDate(today);
+    const finalPassword =
+      newPassword && String(newPassword).trim()
+        ? String(newPassword).trim()
+        : selectedAvailable.password || null;
+
     await pool.execute(
-      `UPDATE subscribers SET ${updateFields.join(", ")} WHERE id = ?`,
-      updateValues,
+      "UPDATE subscribers SET username = ?, password = ?, speed = ?, firstContactDate = ?, disconnectionDate = ? WHERE id = ?",
+      [
+        selectedAvailable.username,
+        finalPassword,
+        selectedAvailable.speed || 4,
+        formatDateForMySQL(today),
+        newDisconnectionDate,
+        id,
+      ],
     );
+
+    // Remove the assigned username from available pool.
+    await pool.execute("DELETE FROM available_usernames WHERE id = ?", [
+      selectedAvailable.id,
+    ]);
 
     res.json({
       success: true,
-      message: "Username changed successfully. Old username saved to history.",
+      message: "تم تغيير اسم المستخدم وربطه بسرعته بنجاح.",
       data: {
         oldUsername: subscriber.username,
-        newUsername,
+        newUsername: selectedAvailable.username,
+        newSpeed: selectedAvailable.speed || 4,
+        firstContactDate: formatDateForMySQL(today),
+        disconnectionDate: newDisconnectionDate,
       },
     });
   } catch (error) {
@@ -2163,12 +2257,20 @@ export const addAvailableUsername = async (req: Request, res: Response) => {
 // Send SMS via TweetSMS provider
 export const sendSmsMessage = async (req: Request, res: Response) => {
   try {
-    const { phone, message } = req.body;
+    const { phone, phones, message } = req.body;
+    const rawRecipients = Array.isArray(phones)
+      ? phones
+      : phone
+        ? [phone]
+        : [];
 
-    if (!phone || !message) {
+    if (rawRecipients.length === 0 || !message) {
       return res
         .status(400)
-        .json({ success: false, message: "رقم الهاتف ونص الرسالة مطلوبان" });
+        .json({
+          success: false,
+          message: "رقم هاتف واحد على الأقل ونص الرسالة مطلوبان",
+        });
     }
 
     // Prefer server environment API key, fall back to provided constant
@@ -2177,22 +2279,86 @@ export const sendSmsMessage = async (req: Request, res: Response) => {
       "$2y$10$XUXBBOuO5did0BHqKgmX8.69fLL1VCBTgi5pWckxHSrRJJKxRpwxK";
     const sender = process.env.SMS_SENDER || "WeNet";
 
-    // Normalize phone to international format if it starts with 0 (e.g., 0594... -> 972594...)
-    let normalized = String(phone).replace(/[^0-9]/g, "");
-    if (normalized.startsWith("0")) {
-      normalized = `972${normalized.slice(1)}`;
+    const normalizePhone = (value: unknown): string | null => {
+      let normalized = String(value || "").replace(/[^0-9]/g, "");
+      if (!normalized) return null;
+      if (normalized.startsWith("0")) {
+        normalized = `972${normalized.slice(1)}`;
+      }
+      return normalized;
+    };
+
+    const normalizedRecipients = Array.from(
+      new Set(
+        rawRecipients
+          .map((recipient) => normalizePhone(recipient))
+          .filter((recipient): recipient is string => Boolean(recipient)),
+      ),
+    );
+
+    if (normalizedRecipients.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "لا توجد أرقام صالحة للإرسال",
+      });
     }
 
-    const url = `https://www.tweetsms.ps/api.php?comm=sendsms&api_key=${encodeURIComponent(
-      apiKey,
-    )}&to=${encodeURIComponent(normalized)}&message=${encodeURIComponent(
-      message,
-    )}&sender=${encodeURIComponent(sender)}`;
+    const sendRequests = normalizedRecipients.map(async (recipientPhone) => {
+      const url = `https://www.tweetsms.ps/api.php?comm=sendsms&api_key=${encodeURIComponent(
+        apiKey,
+      )}&to=${encodeURIComponent(recipientPhone)}&message=${encodeURIComponent(
+        message,
+      )}&sender=${encodeURIComponent(sender)}`;
 
-    const response = await axios.get(url, { timeout: 15000 });
+      const response = await axios.get(url, { timeout: 15000 });
+      return { phone: recipientPhone, providerResponse: response.data };
+    });
 
-    // Return provider response so caller can inspect status
-    res.json({ success: true, data: response.data });
+    const results = await Promise.allSettled(sendRequests);
+    const sent = results
+      .filter((result): result is PromiseFulfilledResult<any> => {
+        return result.status === "fulfilled";
+      })
+      .map((result) => result.value);
+
+    const failed = results
+      .map((result, index) => ({ result, phone: normalizedRecipients[index] }))
+      .filter(({ result }) => result.status === "rejected")
+      .map(({ result, phone }) => ({
+        phone,
+        error:
+          (result as PromiseRejectedResult).reason?.message ||
+          (result as PromiseRejectedResult).reason ||
+          "Unknown error",
+      }));
+
+    if (sent.length === 0) {
+      return res.status(502).json({
+        success: false,
+        message: "فشل إرسال الرسائل إلى جميع الأرقام",
+        data: {
+          totalRequested: normalizedRecipients.length,
+          sentCount: 0,
+          failedCount: failed.length,
+          failed,
+        },
+      });
+    }
+
+    res.json({
+      success: true,
+      message:
+        failed.length > 0
+          ? `تم إرسال ${sent.length} وفشل ${failed.length}`
+          : "تم إرسال الرسائل بنجاح",
+      data: {
+        totalRequested: normalizedRecipients.length,
+        sentCount: sent.length,
+        failedCount: failed.length,
+        sent,
+        failed,
+      },
+    });
   } catch (error: any) {
     console.error("Error sending SMS:", error?.message || error);
     res
@@ -2556,13 +2722,9 @@ export const assignUsernameToSubscriber = async (
 
     const subscriber = subscribers[0];
 
-    // Calculate dates for history record
-    const usageStartDate = subscriber.firstContactDate
-      ? formatDateForMySQL(subscriber.firstContactDate)
-      : null;
-    const usageEndDate = subscriber.firstContactDate
-      ? calculateDisconnectionDate(subscriber.firstContactDate)
-      : null;
+    const { usageStartDate, usageEndDate, isExpired } = getUsageWindow(
+      subscriber.firstContactDate,
+    );
 
     // Save old username to history with usage dates
     await pool.execute(
@@ -2575,6 +2737,33 @@ export const assignUsernameToSubscriber = async (
         usageEndDate,
       ],
     );
+
+    // If old username still has remaining days, return it to available_usernames.
+    if (subscriber.username && !isExpired) {
+      const [existingAvailable] = await pool.execute<RowDataPacket[]>(
+        "SELECT id FROM available_usernames WHERE username = ?",
+        [subscriber.username],
+      );
+      if (existingAvailable.length === 0) {
+        const firstContactDate = subscriber.firstContactDate
+          ? formatDateForMySQL(subscriber.firstContactDate)
+          : null;
+        const expiryDate =
+          subscriber.disconnectionDate ||
+          calculateDisconnectionDate(subscriber.firstContactDate);
+
+        await pool.execute(
+          "INSERT INTO available_usernames (username, password, speed, firstContactDate, expiryDate, isUsed) VALUES (?, ?, ?, ?, ?, FALSE)",
+          [
+            subscriber.username,
+            subscriber.password || null,
+            subscriber.speed || 4,
+            firstContactDate,
+            expiryDate,
+          ],
+        );
+      }
+    }
 
     // Update subscriber with new username, speed and reset firstContactDate/disconnectionDate
     const today = new Date();
@@ -2604,6 +2793,9 @@ export const assignUsernameToSubscriber = async (
       data: {
         oldUsername: subscriber.username,
         newUsername: availableUsername.username,
+        newSpeed,
+        firstContactDate: formatDateForMySQL(today),
+        disconnectionDate: newDisconnectionDate,
         subscriberId,
       },
     });
@@ -2731,6 +2923,86 @@ export const stopSubscriber = async (req: Request, res: Response) => {
 };
 
 // Reactivate a stopped subscriber (move back to subscribers)
+const reactivateStoppedSubscriberById = async (
+  pool: any,
+  id: string,
+): Promise<{ newSubscriberId: string; fullName: string }> => {
+  // Get the stopped subscriber data
+  const [stoppedSubscribers] = await pool.execute(
+    "SELECT * FROM stopped_subscribers WHERE id = ?",
+    [id],
+  );
+
+  if (stoppedSubscribers.length === 0) {
+    throw new Error("NOT_FOUND");
+  }
+
+  const stopped = stoppedSubscribers[0];
+
+  // Check if username is still available or used by someone else
+  if (stopped.username) {
+    const [existingSubscriber] = await pool.execute(
+      "SELECT id FROM subscribers WHERE username = ?",
+      [stopped.username],
+    );
+
+    if (existingSubscriber.length > 0) {
+      throw new Error("USERNAME_IN_USE");
+    }
+  }
+
+  // Calculate new disconnection date
+  const today = new Date();
+  const newDisconnectionDate = calculateDisconnectionDate(today);
+
+  // Generate new ID based on package/line number
+  let lineNumber = 1;
+  if (stopped.package) {
+    const parsed = parseInt(String(stopped.package), 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      lineNumber = parsed;
+    }
+  }
+  const newId = await generateSubscriberId(pool, lineNumber);
+
+  // Insert back into subscribers with generated ID
+  await pool.execute(
+    `INSERT INTO subscribers 
+       (id, username, password, fullName, phone, \`package\`, facilityType, 
+        startDate, firstContactDate, disconnectionDate, speed, notes, isSuspended)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)`,
+    [
+      newId,
+      stopped.username,
+      stopped.password,
+      stopped.fullName,
+      stopped.phone,
+      stopped.package,
+      stopped.facilityType,
+      stopped.startDate,
+      formatDateForMySQL(today), // New firstContactDate
+      newDisconnectionDate,
+      stopped.speed,
+      stopped.notes,
+    ],
+  );
+
+  // Remove username from available_usernames if it was added there
+  if (stopped.username) {
+    await pool.execute("DELETE FROM available_usernames WHERE username = ?", [
+      stopped.username,
+    ]);
+  }
+
+  // Delete from stopped_subscribers
+  await pool.execute("DELETE FROM stopped_subscribers WHERE id = ?", [id]);
+
+  return {
+    newSubscriberId: newId,
+    fullName: stopped.fullName,
+  };
+};
+
 export const reactivateSubscriber = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -2742,96 +3014,101 @@ export const reactivateSubscriber = async (req: Request, res: Response) => {
         .json({ success: false, message: "Database not available" });
     }
 
-    // Get the stopped subscriber data
-    const [stoppedSubscribers] = await pool.execute<RowDataPacket[]>(
-      "SELECT * FROM stopped_subscribers WHERE id = ?",
-      [id],
-    );
-
-    if (stoppedSubscribers.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "المشترك المتوقف غير موجود" });
-    }
-
-    const stopped = stoppedSubscribers[0];
-
-    // Check if username is still available or used by someone else
-    if (stopped.username) {
-      const [existingSubscriber] = await pool.execute<RowDataPacket[]>(
-        "SELECT id FROM subscribers WHERE username = ?",
-        [stopped.username],
-      );
-
-      if (existingSubscriber.length > 0) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "اسم المستخدم مستخدم حالياً من مشترك آخر. يرجى تغيير اسم المستخدم قبل إعادة التفعيل.",
-        });
-      }
-    }
-
-    // Calculate new disconnection date
-    const today = new Date();
-    const newDisconnectionDate = calculateDisconnectionDate(today);
-
-    // Generate new ID based on package/line number
-    // Handle both string and number package values
-    let lineNumber = 1;
-    if (stopped.package) {
-      const parsed = parseInt(String(stopped.package), 10);
-      if (!isNaN(parsed) && parsed > 0) {
-        lineNumber = parsed;
-      }
-    }
-    const newId = await generateSubscriberId(pool, lineNumber);
-
-    // Insert back into subscribers with generated ID
-    await pool.execute<ResultSetHeader>(
-      `INSERT INTO subscribers 
-       (id, username, password, fullName, phone, \`package\`, facilityType, 
-        startDate, firstContactDate, disconnectionDate, speed, notes, isSuspended)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE)`,
-      [
-        newId,
-        stopped.username,
-        stopped.password,
-        stopped.fullName,
-        stopped.phone,
-        stopped.package,
-        stopped.facilityType,
-        stopped.startDate,
-        formatDateForMySQL(today), // New firstContactDate
-        newDisconnectionDate,
-        stopped.speed,
-        stopped.notes,
-      ],
-    );
-
-    // Remove username from available_usernames if it was added there
-    if (stopped.username) {
-      await pool.execute("DELETE FROM available_usernames WHERE username = ?", [
-        stopped.username,
-      ]);
-    }
-
-    // Delete from stopped_subscribers
-    await pool.execute("DELETE FROM stopped_subscribers WHERE id = ?", [id]);
+    const result = await reactivateStoppedSubscriberById(pool, id);
 
     res.json({
       success: true,
       message: "تم إعادة تفعيل المشترك بنجاح",
       data: {
-        newSubscriberId: newId,
-        fullName: stopped.fullName,
+        newSubscriberId: result.newSubscriberId,
+        fullName: result.fullName,
       },
     });
   } catch (error) {
+    if ((error as Error).message === "NOT_FOUND") {
+      return res
+        .status(404)
+        .json({ success: false, message: "المشترك المتوقف غير موجود" });
+    }
+    if ((error as Error).message === "USERNAME_IN_USE") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "اسم المستخدم مستخدم حالياً من مشترك آخر. يرجى تغيير اسم المستخدم قبل إعادة التفعيل.",
+      });
+    }
     console.error("Error reactivating subscriber:", error);
     res.status(500).json({
       success: false,
       message: "خطأ في إعادة تفعيل المشترك: " + (error as Error).message,
+      error,
+    });
+  }
+};
+
+export const bulkReactivateSubscribers = async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body;
+    const pool = getPool();
+
+    if (!pool) {
+      return res
+        .status(503)
+        .json({ success: false, message: "Database not available" });
+    }
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "يرجى تحديد مشترك واحد على الأقل",
+      });
+    }
+
+    const success: Array<{ oldStoppedId: string; newSubscriberId: string }> = [];
+    const failed: Array<{ id: string; reason: string }> = [];
+
+    for (const rawId of ids) {
+      const id = String(rawId || "").trim();
+      if (!id) continue;
+      try {
+        const reactivated = await reactivateStoppedSubscriberById(pool, id);
+        success.push({
+          oldStoppedId: id,
+          newSubscriberId: reactivated.newSubscriberId,
+        });
+      } catch (error) {
+        const message = (error as Error).message;
+        if (message === "NOT_FOUND") {
+          failed.push({ id, reason: "غير موجود في قائمة المتوقفين" });
+        } else if (message === "USERNAME_IN_USE") {
+          failed.push({ id, reason: "اسم المستخدم مستخدم حالياً" });
+        } else {
+          failed.push({ id, reason: "خطأ غير متوقع أثناء إعادة التفعيل" });
+        }
+      }
+    }
+
+    if (success.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "فشلت إعادة التفعيل للمشتركين المحددين",
+        data: { success, failed },
+      });
+    }
+
+    res.json({
+      success: true,
+      message:
+        failed.length > 0
+          ? `تمت إعادة تفعيل ${success.length} وفشل ${failed.length}`
+          : `تمت إعادة تفعيل ${success.length} مشترك`,
+      data: { success, failed },
+    });
+  } catch (error) {
+    console.error("Error bulk reactivating subscribers:", error);
+    res.status(500).json({
+      success: false,
+      message: "خطأ في إعادة التفعيل الجماعي",
       error,
     });
   }
@@ -3230,6 +3507,14 @@ export const getDashboardStats = async (req: Request, res: Response) => {
        ORDER BY sh.changed_at DESC LIMIT 5`,
     );
 
+    // Recently added subscribers
+    const [recentNewSubscribers] = await pool.execute<RowDataPacket[]>(
+      `SELECT id, username, fullName, phone, createdAt
+       FROM subscribers
+       ORDER BY createdAt DESC, id DESC
+       LIMIT 5`,
+    );
+
     // Daily new subscribers for last 7 days (for chart)
     const [dailyNewSubscribers] = await pool.execute<RowDataPacket[]>(
       `SELECT DATE(createdAt) as date, COUNT(*) as count 
@@ -3286,6 +3571,7 @@ export const getDashboardStats = async (req: Request, res: Response) => {
         availableBySpeed: availableResult,
         facilityTypes: facilityResult,
         recentSpeedChanges: recentSpeedChanges,
+        recentNewSubscribers: recentNewSubscribers,
         charts: {
           dailyNewSubscribers: dailyNewSubscribers,
           dailyAvailableAdded: dailyAvailableAdded,

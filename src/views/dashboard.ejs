@@ -33,8 +33,6 @@
           <li><a href="#available-usernames" class="menu-item" data-section="available-usernames">أسماء مستخدمين
               متاحة</a></li>
           <li><a href="#sms" class="menu-item" data-section="sms"><i class="fas fa-comment-sms"></i> رسائل SMS</a></li>
-          <li><a href="#subscriber-profile" class="menu-item profile-menu-item" data-section="subscriber-profile"
-              style="display: none;">ملف المشترك</a></li>
           <li><a href="/logout" class="menu-item logout">تسجيل الخروج</a></li>
         </ul>
       </nav>
@@ -279,6 +277,21 @@
               </div>
             </div>
 
+            <!-- New Subscribers -->
+            <div class="analytics-card">
+              <div class="card-header">
+                <h3><i class="fas fa-user-plus"></i> مشتركون جدد</h3>
+              </div>
+              <div class="card-body">
+                <div class="recent-changes-list" id="recentNewSubscribersList">
+                  <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <p>لا توجد إضافات حديثة</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- Expiring Soon -->
             <div class="analytics-card">
               <div class="card-header">
@@ -345,14 +358,18 @@
                 </div>
 
                 <div class="input-group search-group" id="smsSubscriberGroup">
-                  <label for="smsSubscriberSearch">ابحث عن المشترك (بالاسم أو الهاتف)</label>
+                  <label for="smsSubscriberSearch">ابحث عن المشتركين (بالاسم أو الهاتف)</label>
                   <div class="search-wrapper">
                     <input type="text" id="smsSubscriberSearch" placeholder="اكتب اسم المشترك أو رقم الهاتف..."
                       autocomplete="off">
-                    <input type="hidden" id="smsSelectedPhone" name="phone">
                     <ul id="smsSuggestions" class="suggestions-list" role="listbox" aria-label="اقتراحات المشتركين"></ul>
                   </div>
-                  <p class="field-hint">ابدأ بكتابة الاسم أو الرقم، ثم اختر المشترك من القائمة المنسدلة.</p>
+                  <div class="sms-selected-toolbar">
+                    <span id="smsSelectedCountBadge" class="sms-selected-count">المحددون: 0</span>
+                    <button type="button" id="smsClearSelectedBtn" class="sms-clear-selected-btn">مسح المحددين</button>
+                  </div>
+                  <div id="smsSelectedRecipients" class="sms-selected-recipients"></div>
+                  <p class="field-hint">يمكنك اختيار أكثر من مشترك. اختر من القائمة لإضافة المستلم.</p>
                 </div>
 
                 <div class="input-group" id="smsCustomPhoneGroup" style="display: none;">
@@ -389,7 +406,7 @@
               </ul>
               <div class="sms-side-note">
                 <i class="fas fa-info-circle"></i>
-                <span>يتم إرسال الرسالة للرقم الذي تختاره من قائمة المشتركين.</span>
+                <span>يمكنك الإرسال لعدة مشتركين دفعة واحدة أو إلى رقم مخصص.</span>
               </div>
             </aside>
           </div>
@@ -475,8 +492,26 @@
 
                 <div class="form-group">
                   <label for="facilityType">نوع المنشأة</label>
-                  <input type="text" id="facilityType" name="facilityType"
-                    placeholder="أدخل نوع المنشأة (متجر، صيدلية، مطعم...)">
+                  <select id="facilityType" name="facilityType">
+                    <option value="">اختر نوع المنشأة</option>
+                    <option value="متجر هواتف">متجر هواتف</option>
+                    <option value="متجر ملابس">متجر ملابس</option>
+                    <option value="صالون رجالي">صالون رجالي</option>
+                    <option value="محل خياطة">محل خياطة</option>
+                    <option value="مطبعة">مطبعة</option>
+                    <option value="صيدلية">صيدلية</option>
+                    <option value="مطعم شاورما">مطعم شاورما</option>
+                    <option value="مطعم فلافل">مطعم فلافل</option>
+                    <option value="ماركت">ماركت</option>
+                    <option value="متجر أدوات منزلية">متجر أدوات منزلية</option>
+                    <option value="متجر سجائر">متجر سجائر</option>
+                    <option value="فري لانسر">فري لانسر</option>
+                    <option value="محل صرافة">محل صرافة</option>
+                    <option value="متجر احذية">متجر احذية</option>
+                    <option value="عيادة اسنان">عيادة اسنان</option>
+                    <option value="محل تصليح">محل تصليح</option>
+                    <option value="أخرى">أخرى</option>
+                  </select>
                 </div>
 
                 <div class="form-group">
@@ -533,8 +568,14 @@
             <div class="filters-grid">
               <div class="filter-group">
                 <label>بحث عام</label>
-                <input type="text" id="mainSearchInput"
-                  placeholder="بحث في جميع الحقول... (جرب: 'لا هاتف', 'لا تاريخ', 'بيانات ناقصة')">
+                <div class="main-search-wrapper">
+                  <i class="fas fa-search main-search-icon"></i>
+                  <input type="text" id="mainSearchInput"
+                    placeholder="بحث في جميع الحقول... (مثال: اسم، هاتف، لا هاتف، بيانات ناقصة)">
+                  <button type="button" id="mainSearchClearBtn" class="main-search-clear-btn" title="مسح البحث">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
               </div>
               <div class="filter-group">
                 <label>ID</label>
@@ -579,11 +620,7 @@
               </div>
               <div class="filter-group">
                 <label>اسم المستخدم القديم</label>
-                <div style="display: flex; gap: 8px;">
-                  <input type="text" id="oldUsernameSearchInput" placeholder="بحث باسم المستخدم القديم..."
-                    style="flex: 1;">
-                  <button class="btn btn-primary modern-btn btn-sm" id="searchOldUsernameBtn">بحث</button>
-                </div>
+                <input type="text" id="oldUsernameSearchInput" placeholder="بحث باسم المستخدم القديم...">
               </div>
             </div>
             <div id="oldUsernameSearchResult" style="display: none; margin-top: 15px;">
@@ -624,6 +661,9 @@
           <div class="section-header">
             <h2>🔔 مشتركين تنتهي صلاحية اسم المستخدم قريباً</h2>
             <div class="header-buttons">
+              <button class="btn btn-success modern-btn" id="sendExpiringSmsBtn" style="display: none;">
+                إرسال SMS للمحددين (<span id="expiringSmsSelectedCount">0</span>)
+              </button>
               <button class="btn btn-primary modern-btn" id="bulkChangeUsernamesBtn" style="display: none;">
                 تغيير أسماء المستخدمين للمحددين (<span id="expiringSelectedCount">0</span>)
               </button>
@@ -699,12 +739,18 @@
         <section id="stopped-subscribers" class="section">
           <div class="section-header">
             <h2>المشتركون المتوقفون</h2>
+            <div class="header-buttons">
+              <button class="btn btn-success modern-btn" id="reactivateSelectedStoppedBtn" style="display: none;">
+                إعادة تفعيل المحددين (<span id="selectedStoppedCount">0</span>)
+              </button>
+            </div>
           </div>
 
           <div class="table-container">
             <table class="data-table modern-table">
               <thead>
                 <tr>
+                  <th class="checkbox-col"><input type="checkbox" id="selectAllStoppedCheckbox" title="تحديد الكل"></th>
                   <th>الاسم الكامل</th>
                   <th>اسم المستخدم</th>
                   <th>الهاتف</th>
@@ -911,7 +957,7 @@
                     </div>
                     <div class="profile-form-group">
                       <label>اسم المستخدم</label>
-                      <input type="text" id="profileUsername" name="username" class="profile-input">
+                      <input type="text" id="profileUsername" name="username" class="profile-input readonly" readonly>
                     </div>
                     <div class="profile-form-group">
                       <label>كلمة المرور</label>
@@ -923,8 +969,26 @@
                     </div>
                     <div class="profile-form-group">
                       <label>نوع المنشأة</label>
-                      <input type="text" id="profileFacilityType" name="facilityType" class="profile-input"
-                        placeholder="متجر، صيدلية، مطعم...">
+                      <select id="profileFacilityType" name="facilityType" class="profile-select">
+                        <option value="">اختر نوع المنشأة</option>
+                        <option value="متجر هواتف">متجر هواتف</option>
+                        <option value="متجر ملابس">متجر ملابس</option>
+                        <option value="صالون رجالي">صالون رجالي</option>
+                        <option value="محل خياطة">محل خياطة</option>
+                        <option value="مطبعة">مطبعة</option>
+                        <option value="صيدلية">صيدلية</option>
+                        <option value="مطعم شاورما">مطعم شاورما</option>
+                        <option value="مطعم فلافل">مطعم فلافل</option>
+                        <option value="ماركت">ماركت</option>
+                        <option value="متجر أدوات منزلية">متجر أدوات منزلية</option>
+                        <option value="متجر سجائر">متجر سجائر</option>
+                        <option value="فري لانسر">فري لانسر</option>
+                        <option value="محل صرافة">محل صرافة</option>
+                        <option value="متجر احذية">متجر احذية</option>
+                        <option value="عيادة اسنان">عيادة اسنان</option>
+                        <option value="محل تصليح">محل تصليح</option>
+                        <option value="أخرى">أخرى</option>
+                      </select>
                     </div>
                     <div class="profile-form-group">
                       <label>رقم الجوال</label>
@@ -937,10 +1001,7 @@
                     </div>
                     <div class="profile-form-group">
                       <label>السرعة</label>
-                      <select id="profileSpeed" name="speed" class="profile-select">
-                        <option value="4">4 ميجا</option>
-                        <option value="8">8 ميجا</option>
-                      </select>
+                      <input type="text" id="profileSpeed" name="speed" class="profile-input readonly" readonly>
                     </div>
                     <div class="profile-form-group">
                       <label>التاريخ</label>
@@ -974,12 +1035,22 @@
                 <div class="profile-card-header">
                   <h3>تغيير اسم المستخدم</h3>
                 </div>
-                <div class="profile-card-body">
-                  <div class="profile-form-group">
-                    <label>اسم المستخدم الجديد</label>
-                    <input type="text" id="newUsernameInput" class="profile-input"
-                      placeholder="أدخل اسم المستخدم الجديد">
+                <div class="profile-card-body username-change-body">
+                  <div class="profile-form-grid compact-grid">
+                    <div class="profile-form-group">
+                      <label>اسم المستخدم الجديد</label>
+                      <input type="text" id="newUsernameInput" class="profile-input"
+                        placeholder="أدخل اسم المستخدم الجديد">
+                    </div>
+                    <div class="profile-form-group">
+                      <label>السرعة المطلوبة</label>
+                      <select id="newUsernameTargetSpeed" class="profile-select">
+                        <option value="4">4 ميجا</option>
+                        <option value="8">8 ميجا</option>
+                      </select>
+                    </div>
                   </div>
+                  <p class="profile-hint" id="newUsernameSpeedMatchHint">اختر اسم مستخدم جديد وسرعة مطلوبة.</p>
                   <div class="profile-form-group">
                     <label>كلمة المرور الجديدة</label>
                     <input type="text" id="newPasswordInput" class="profile-input"

@@ -8,6 +8,7 @@ let currentProfileSubscriberId =
   localStorage.getItem("currentProfileSubscriberId") || null;
 let originalProfileUsername = null; // To track if username changed
 let originalProfileSpeed = null; // To track if speed changed
+let availableUsernameSpeedMap = new Map(); // username -> speed
 
 // =============================================
 // TOAST NOTIFICATION SYSTEM
@@ -145,6 +146,40 @@ function formatDate(dateString) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const year = date.getFullYear();
   return `${day}/${month}/${year}`;
+}
+
+function setSelectValueWithFallback(selectId, value) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  const safeValue = String(value || "").trim();
+
+  if (!safeValue) {
+    select.value = "";
+    return;
+  }
+
+  const exists = Array.from(select.options).some(
+    (option) => option.value === safeValue,
+  );
+  if (!exists) {
+    const customOption = document.createElement("option");
+    customOption.value = safeValue;
+    customOption.textContent = `${safeValue} (موجود مسبقاً)`;
+    select.appendChild(customOption);
+  }
+
+  select.value = safeValue;
+}
+
+function normalizeSearchValue(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFKC")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // Initialize dashboard
@@ -316,18 +351,43 @@ function setupEventListeners() {
 
   // Main search inputs - Live filtering on input
   const mainSearchInput = document.getElementById("mainSearchInput");
+  const mainSearchClearBtn = document.getElementById("mainSearchClearBtn");
 
   if (mainSearchInput) {
     mainSearchInput.addEventListener("input", () => {
+      if (mainSearchClearBtn) {
+        mainSearchClearBtn.style.display = mainSearchInput.value.trim()
+          ? "inline-flex"
+          : "none";
+      }
       clearTimeout(searchTimeout);
       searchTimeout = setTimeout(() => {
         const searchTerm = mainSearchInput.value.trim();
         if (searchTerm) {
           handleSmartSearch(searchTerm);
         } else {
-          loadSubscribers(currentPage);
+          loadSubscribers(1);
         }
       }, 300);
+    });
+
+    mainSearchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        clearTimeout(searchTimeout);
+        const searchTerm = mainSearchInput.value.trim();
+        if (searchTerm) handleSmartSearch(searchTerm);
+      }
+    });
+  }
+
+  if (mainSearchClearBtn) {
+    mainSearchClearBtn.addEventListener("click", () => {
+      if (!mainSearchInput) return;
+      mainSearchInput.value = "";
+      mainSearchClearBtn.style.display = "none";
+      loadSubscribers(1);
+      mainSearchInput.focus();
     });
   }
 
@@ -471,7 +531,7 @@ async function loadSubscribers(page = 1, search = "") {
 
 // Smart search function with special commands
 async function handleSmartSearch(searchTerm) {
-  const term = searchTerm.toLowerCase().trim();
+  const term = normalizeSearchValue(searchTerm);
 
   // If no data loaded, load it first
   if (allSubscribers.length === 0) {
@@ -597,15 +657,15 @@ async function handleSmartSearch(searchTerm) {
   // Regular search across all fields
   const filtered = allSubscribers.filter((sub) => {
     return (
-      (sub.username && sub.username.toLowerCase().includes(term)) ||
-      (sub.fullName && sub.fullName.toLowerCase().includes(term)) ||
-      (sub.phone && sub.phone.toLowerCase().includes(term)) ||
-      (sub.package && sub.package.toLowerCase().includes(term)) ||
-      (sub.notes && sub.notes.toLowerCase().includes(term)) ||
-      (sub.monthlyPrice && sub.monthlyPrice.toString().includes(term)) ||
-      (sub.startDate && sub.startDate.toLowerCase().includes(term)) ||
+      normalizeSearchValue(sub.username).includes(term) ||
+      normalizeSearchValue(sub.fullName).includes(term) ||
+      normalizeSearchValue(sub.phone).includes(term) ||
+      normalizeSearchValue(sub.package).includes(term) ||
+      normalizeSearchValue(sub.notes).includes(term) ||
+      normalizeSearchValue(sub.monthlyPrice).includes(term) ||
+      normalizeSearchValue(sub.startDate).includes(term) ||
       (sub.firstContactDate &&
-        sub.firstContactDate.toLowerCase().includes(term))
+        normalizeSearchValue(sub.firstContactDate).includes(term))
     );
   });
 
@@ -1006,7 +1066,8 @@ async function handleFormSubmit(e) {
     const result = await response.json();
     if (result.success) {
       hideForm();
-      loadSubscribers(currentPage);
+      // Show newest changes immediately after adding.
+      loadSubscribers(1);
       loadStats();
 
       const uploadResult = document.getElementById("uploadResult");
@@ -1317,9 +1378,17 @@ async function handleFileUpload(files) {
 
     uploadResult.style.display = "block";
 
-    // Reload subscribers if any were uploaded
+    // Reload subscribers and dashboard cards after successful import/update.
     if (result.success && result.uploaded > 0) {
-      setTimeout(() => loadSubscribers(), 500);
+      setTimeout(() => {
+        loadSubscribers(1);
+        loadStats();
+      }, 500);
+    } else if (result.success) {
+      setTimeout(() => {
+        loadSubscribers(1);
+        loadStats();
+      }, 500);
     }
   } catch (error) {
     console.error("Error uploading file:", error);
@@ -1393,6 +1462,7 @@ async function loadStats() {
 
       // Update recent speed changes
       updateRecentSpeedChanges(data.recentSpeedChanges);
+      updateRecentNewSubscribers(data.recentNewSubscribers);
 
       // Update current date
       updateCurrentDate();
@@ -1608,6 +1678,36 @@ function updateRecentSpeedChanges(changes) {
       </div>
       <div class="recent-item-detail">من ${change.old_speed}M إلى ${change.new_speed}M</div>
       <div class="recent-item-time">${formatDate(change.changed_at)}</div>
+    </div>
+  `,
+    )
+    .join("");
+}
+
+function updateRecentNewSubscribers(subscribers) {
+  const listEl = document.getElementById("recentNewSubscribersList");
+  if (!listEl) return;
+
+  if (!subscribers || subscribers.length === 0) {
+    listEl.innerHTML = `
+      <div class="empty-state">
+        <i class="fas fa-inbox"></i>
+        <p>لا توجد إضافات حديثة</p>
+      </div>
+    `;
+    return;
+  }
+
+  listEl.innerHTML = subscribers
+    .map(
+      (sub) => `
+    <div class="recent-item">
+      <div class="recent-item-title">
+        <i class="fas fa-user-plus"></i>
+        ${sub.fullName || sub.username || "-"}
+      </div>
+      <div class="recent-item-detail">${sub.phone || "بدون هاتف"}</div>
+      <div class="recent-item-time">${formatDate(sub.createdAt)}</div>
     </div>
   `,
     )
@@ -1882,12 +1982,6 @@ async function openSubscriberProfile(subscriberId, skipHashChange = false) {
   // Switch to profile section
   switchSection("subscriber-profile");
 
-  // Show profile menu item in sidebar
-  const profileMenuItem = document.querySelector(".profile-menu-item");
-  if (profileMenuItem) {
-    profileMenuItem.style.display = "block";
-  }
-
   try {
     console.log("Fetching profile data for:", subscriberId);
     const response = await authenticatedFetch(
@@ -1920,8 +2014,7 @@ async function openSubscriberProfile(subscriberId, skipHashChange = false) {
         subscriber.password || "";
       document.getElementById("profileFullName").value =
         subscriber.fullName || "";
-      document.getElementById("profileFacilityType").value =
-        subscriber.facilityType || "";
+      setSelectValueWithFallback("profileFacilityType", subscriber.facilityType);
       document.getElementById("profilePhone").value = subscriber.phone || "";
       document.getElementById("profilePackage").value =
         subscriber.package || "";
@@ -1932,8 +2025,15 @@ async function openSubscriberProfile(subscriberId, skipHashChange = false) {
         formatDateForInput(subscriber.firstContactDate);
       document.getElementById("profileDisconnectionDate").value =
         formatDateForInput(subscriber.disconnectionDate);
-      document.getElementById("profileSpeed").value = subscriber.speed || 4;
+      document.getElementById("profileSpeed").value = `${subscriber.speed || 4} ميجا`;
       document.getElementById("profileNotes").value = subscriber.notes || "";
+      document.getElementById("newUsernameInput").value = "";
+      document.getElementById("newPasswordInput").value = "";
+      document.getElementById("newUsernameTargetSpeed").value = String(
+        subscriber.speed || 4,
+      );
+      document.getElementById("newUsernameSpeedMatchHint").textContent =
+        "اختر اسم مستخدم جديد وسرعة مطلوبة.";
 
       // Update timer display
       updateProfileTimer(
@@ -2116,12 +2216,38 @@ function goBackToSubscribers() {
   originalProfileUsername = null;
   originalProfileSpeed = null;
   localStorage.removeItem("currentProfileSubscriberId");
-  // Hide profile menu item
-  const profileMenuItem = document.querySelector(".profile-menu-item");
-  if (profileMenuItem) {
-    profileMenuItem.style.display = "none";
-  }
   window.location.hash = "subscribers";
+}
+
+function updateChangeUsernameSpeedPreview() {
+  const usernameInput = document.getElementById("newUsernameInput");
+  const targetSpeedEl = document.getElementById("newUsernameTargetSpeed");
+  const hintEl = document.getElementById("newUsernameSpeedMatchHint");
+  if (!usernameInput || !targetSpeedEl || !hintEl) return;
+
+  const username = String(usernameInput.value || "").trim().toLowerCase();
+  const targetSpeed = Number(targetSpeedEl.value || 4);
+  if (!username) {
+    hintEl.textContent = "اختر اسم مستخدم جديد وسرعة مطلوبة.";
+    hintEl.style.color = "#64748b";
+    return;
+  }
+
+  const actualSpeed = availableUsernameSpeedMap.get(username);
+  if (!actualSpeed) {
+    hintEl.textContent = "هذا الاسم غير موجود ضمن الأسماء المتاحة.";
+    hintEl.style.color = "#dc2626";
+    return;
+  }
+
+  if (actualSpeed !== targetSpeed) {
+    hintEl.textContent = `الاسم متاح بسرعة ${actualSpeed} ميجا وليس ${targetSpeed} ميجا.`;
+    hintEl.style.color = "#d97706";
+    return;
+  }
+
+  hintEl.textContent = `ممتاز، الاسم متاح بسرعة ${actualSpeed} ميجا.`;
+  hintEl.style.color = "#059669";
 }
 
 // Open import Excel modal
@@ -2148,6 +2274,7 @@ async function loadAvailableUsernamesDropdown() {
     );
     const result4M = await response4M.json();
     const result8M = await response8M.json();
+    availableUsernameSpeedMap = new Map();
 
     const select = document.getElementById("availableUsernameSelect");
     select.innerHTML = '<option value="">اختر اسم مستخدم متاح...</option>';
@@ -2162,6 +2289,10 @@ async function loadAvailableUsernamesDropdown() {
         option.dataset.speed = "4";
         option.textContent = `${u.username}`;
         optgroup4M.appendChild(option);
+        availableUsernameSpeedMap.set(
+          String(u.username || "").toLowerCase(),
+          4,
+        );
       });
       select.appendChild(optgroup4M);
     }
@@ -2176,9 +2307,15 @@ async function loadAvailableUsernamesDropdown() {
         option.dataset.speed = "8";
         option.textContent = `${u.username}`;
         optgroup8M.appendChild(option);
+        availableUsernameSpeedMap.set(
+          String(u.username || "").toLowerCase(),
+          8,
+        );
       });
       select.appendChild(optgroup8M);
     }
+
+    updateChangeUsernameSpeedPreview();
   } catch (error) {
     console.error("Error loading available usernames:", error);
   }
@@ -2190,9 +2327,23 @@ async function changeSubscriberUsername() {
 
   const newUsername = document.getElementById("newUsernameInput").value.trim();
   const newPassword = document.getElementById("newPasswordInput").value.trim();
+  const targetSpeed =
+    Number(document.getElementById("newUsernameTargetSpeed")?.value || 4) || 4;
 
   if (!newUsername) {
     alert("يرجى إدخال اسم المستخدم الجديد");
+    return;
+  }
+
+  const actualSpeed = availableUsernameSpeedMap.get(newUsername.toLowerCase());
+  if (!actualSpeed) {
+    alert("اسم المستخدم غير متاح حالياً. اختر اسماً من الأسماء المتاحة.");
+    return;
+  }
+  if (actualSpeed !== targetSpeed) {
+    alert(
+      `الاسم الذي أدخلته سرعته ${actualSpeed} ميجا. اختر السرعة المطابقة أو غيّر الاسم.`,
+    );
     return;
   }
 
@@ -2204,36 +2355,23 @@ async function changeSubscriberUsername() {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newUsername, newPassword }),
+        body: JSON.stringify({ newUsername, newPassword, targetSpeed }),
       },
     );
 
     const result = await response.json();
 
     if (result.success) {
-      // Add old username to history table immediately
-      const oldUsername = document.getElementById("profileUsername").value;
-      const oldPassword = document.getElementById("profilePassword").value;
-      const usageStartDate = document.getElementById(
-        "profileFirstContactDate",
-      ).value;
-      addToUsernameHistoryTable(oldUsername, oldPassword, usageStartDate);
-
-      // Update the form with new username
-      document.getElementById("profileUsername").value = newUsername;
-      if (newPassword) {
-        document.getElementById("profilePassword").value = newPassword;
-      }
-      originalProfileUsername = newUsername;
-
-      alert("تم تغيير اسم المستخدم بنجاح");
+      alert("تم تغيير اسم المستخدم وربطه بالسرعة بنجاح");
       // Clear inputs
       document.getElementById("newUsernameInput").value = "";
       document.getElementById("newPasswordInput").value = "";
-      // Refresh subscribers list
+      // Reload profile to reflect new speed/dates/history from backend.
+      await openSubscriberProfile(currentProfileSubscriberId, true);
       loadSubscribers();
-      // Refresh available usernames
       loadAvailableUsernames();
+      loadAvailableUsernamesDropdown();
+      loadStats();
     } else {
       alert("خطأ في تغيير اسم المستخدم: " + result.message);
     }
@@ -2282,27 +2420,12 @@ async function assignAvailableUsername() {
     const result = await response.json();
 
     if (result.success) {
-      // Add old username to history table immediately
-      const oldUsername = document.getElementById("profileUsername").value;
-      const oldPassword = document.getElementById("profilePassword").value;
-      const usageStartDate = document.getElementById(
-        "profileFirstContactDate",
-      ).value;
-      addToUsernameHistoryTable(oldUsername, oldPassword, usageStartDate);
-
-      // Update the form with new username from result
-      if (result.data) {
-        document.getElementById("profileUsername").value =
-          result.data.newUsername || "";
-        originalProfileUsername = result.data.newUsername;
-      }
-
       alert("تم تعيين اسم المستخدم بنجاح");
       // Reset dropdown
       document.getElementById("availableUsernameSelect").value = "";
-      // Refresh subscribers list
+      // Reload profile to reflect new speed/dates/history from backend.
+      await openSubscriberProfile(currentProfileSubscriberId, true);
       loadSubscribers();
-      // Refresh available usernames list and stats
       loadAvailableUsernames();
       loadAvailableUsernamesDropdown();
       loadStats();
@@ -2654,6 +2777,12 @@ function setupNewFeatureListeners() {
     .getElementById("changeUsernameBtn")
     ?.addEventListener("click", changeSubscriberUsername);
   document
+    .getElementById("newUsernameInput")
+    ?.addEventListener("input", updateChangeUsernameSpeedPreview);
+  document
+    .getElementById("newUsernameTargetSpeed")
+    ?.addEventListener("change", updateChangeUsernameSpeedPreview);
+  document
     .getElementById("assignAvailableUsernameBtn")
     ?.addEventListener("click", assignAvailableUsername);
 
@@ -2727,7 +2856,6 @@ function setupNewFeatureListeners() {
     const subscriberGroup = document.getElementById("smsSubscriberGroup");
     const customGroup = document.getElementById("smsCustomPhoneGroup");
     const searchInput = document.getElementById("smsSubscriberSearch");
-    const hiddenPhone = document.getElementById("smsSelectedPhone");
     const suggestions = document.getElementById("smsSuggestions");
     const customPhone = document.getElementById("smsCustomPhone");
 
@@ -2742,7 +2870,6 @@ function setupNewFeatureListeners() {
           if (subscriberGroup) subscriberGroup.style.display = "none";
           if (customGroup) customGroup.style.display = "";
           if (searchInput) searchInput.value = "";
-          if (hiddenPhone) hiddenPhone.value = "";
           if (suggestions) {
             suggestions.innerHTML = "";
             suggestions.style.display = "none";
@@ -2751,6 +2878,13 @@ function setupNewFeatureListeners() {
       });
     });
   }
+
+  document
+    .getElementById("smsClearSelectedBtn")
+    ?.addEventListener("click", () => {
+      selectedSmsRecipients.clear();
+      renderSmsSelectedRecipients();
+    });
 
   // SMS message character counter
   const smsMessage = document.getElementById("smsMessage");
@@ -2808,23 +2942,7 @@ async function handleProfileEditSubmit(e) {
 
   if (!currentProfileSubscriberId) return;
 
-  const newSpeed = Number(document.getElementById("profileSpeed").value) || 4;
-  const currentUsername = document.getElementById("profileUsername").value;
-
-  // Check if speed is changing
-  if (originalProfileSpeed && newSpeed !== originalProfileSpeed) {
-    // Speed is changing - need to select a new username
-    // Check if the username was also changed (user selected a new one)
-    if (currentUsername === originalProfileUsername) {
-      // User hasn't selected a new username yet - show the modal
-      alert("عند تغيير السرعة، يجب اختيار اسم مستخدم جديد من الأسماء المتاحة");
-      openSpeedChangeUsernameModal(newSpeed);
-      return;
-    }
-  }
-
   const formData = {
-    username: document.getElementById("profileUsername").value,
     password: document.getElementById("profilePassword").value,
     fullName: document.getElementById("profileFullName").value,
     facilityType: document.getElementById("profileFacilityType").value,
@@ -2833,7 +2951,6 @@ async function handleProfileEditSubmit(e) {
     startDate: document.getElementById("profileStartDate").value,
     firstContactDate:
       document.getElementById("profileFirstContactDate").value || null,
-    speed: newSpeed,
     notes: document.getElementById("profileNotes").value,
   };
 
@@ -2850,30 +2967,6 @@ async function handleProfileEditSubmit(e) {
     const result = await response.json();
 
     if (result.success) {
-      // Check if username was changed
-      const newUsername = formData.username;
-      if (originalProfileUsername && newUsername !== originalProfileUsername) {
-        // Add old username to history table immediately
-        const usageStartDate = document.getElementById(
-          "profileFirstContactDate",
-        ).value;
-        addToUsernameHistoryTable(
-          originalProfileUsername,
-          document.getElementById("profilePassword").value,
-          usageStartDate,
-        );
-        // Update original username to new one
-        originalProfileUsername = newUsername;
-      }
-
-      // Check if speed was changed - update original speed and add to history display
-      if (result.speedHistoryEntry) {
-        addToSpeedHistoryList(result.speedHistoryEntry);
-        originalProfileSpeed = newSpeed;
-        // Refresh available usernames to show the old one was added
-        loadAvailableUsernames();
-      }
-
       alert("تم حفظ التعديلات بنجاح");
 
       // Update all profile fields from response data
@@ -2903,6 +2996,9 @@ async function handleProfileEditSubmit(e) {
             result.data.disconnectionDate,
             result.data.speed,
           );
+        }
+        if (result.data.speed !== undefined) {
+          document.getElementById("profileSpeed").value = `${result.data.speed} ميجا`;
         }
       }
       loadSubscribers(); // Refresh the list
@@ -3230,10 +3326,27 @@ function removeHistoryEntryFromDOM(historyId) {
 // =====================
 // STOPPED SUBSCRIBERS
 // =====================
+let selectedStoppedIds = new Set();
+
+function setupStoppedSubscribersListeners() {
+  document
+    .getElementById("selectAllStoppedCheckbox")
+    ?.addEventListener("change", handleSelectAllStopped);
+  document
+    .getElementById("reactivateSelectedStoppedBtn")
+    ?.addEventListener("click", reactivateSelectedStoppedSubscribers);
+}
 
 // Load stopped subscribers
 async function loadStoppedSubscribers() {
   try {
+    selectedStoppedIds.clear();
+    const selectAll = document.getElementById("selectAllStoppedCheckbox");
+    if (selectAll) {
+      selectAll.checked = false;
+      selectAll.indeterminate = false;
+    }
+
     const response = await authenticatedFetch("/api/subscribers/stopped");
     const result = await response.json();
 
@@ -3256,7 +3369,8 @@ function displayStoppedSubscribers(subscribers) {
 
   if (!subscribers || subscribers.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="7" class="text-center">لا يوجد مشتركين متوقفين</td></tr>';
+      '<tr><td colspan="8" class="text-center">لا يوجد مشتركين متوقفين</td></tr>';
+    updateStoppedSelectionUI();
     return;
   }
 
@@ -3266,6 +3380,9 @@ function displayStoppedSubscribers(subscribers) {
       ? new Date(s.stoppedAt).toLocaleDateString("ar-EG")
       : "-";
     row.innerHTML = `
+      <td class="checkbox-col">
+        <input type="checkbox" class="stopped-checkbox" data-id="${s.id}" ${selectedStoppedIds.has(s.id) ? "checked" : ""} onchange="handleStoppedCheckboxChange(this)">
+      </td>
       <td><strong>${s.fullName || "-"}</strong></td>
       <td>${s.username || "-"}</td>
       <td>${s.phone || "-"}</td>
@@ -3281,6 +3398,80 @@ function displayStoppedSubscribers(subscribers) {
     `;
     tbody.appendChild(row);
   });
+
+  updateStoppedSelectionUI();
+}
+
+function handleStoppedCheckboxChange(checkbox) {
+  const id = checkbox.dataset.id;
+  if (checkbox.checked) {
+    selectedStoppedIds.add(id);
+  } else {
+    selectedStoppedIds.delete(id);
+  }
+  updateStoppedSelectionUI();
+}
+
+function handleSelectAllStopped(e) {
+  const checkboxes = document.querySelectorAll(".stopped-checkbox");
+  checkboxes.forEach((cb) => {
+    cb.checked = e.target.checked;
+    const id = cb.dataset.id;
+    if (e.target.checked) {
+      selectedStoppedIds.add(id);
+    } else {
+      selectedStoppedIds.delete(id);
+    }
+  });
+  updateStoppedSelectionUI();
+}
+
+function updateStoppedSelectionUI() {
+  const countEl = document.getElementById("selectedStoppedCount");
+  const bulkBtn = document.getElementById("reactivateSelectedStoppedBtn");
+  const selectAll = document.getElementById("selectAllStoppedCheckbox");
+  const checkboxes = document.querySelectorAll(".stopped-checkbox");
+
+  if (countEl) countEl.textContent = selectedStoppedIds.size;
+  if (bulkBtn) {
+    bulkBtn.style.display = selectedStoppedIds.size > 0 ? "inline-block" : "none";
+  }
+
+  if (selectAll) {
+    const checkedCount = Array.from(checkboxes).filter((cb) => cb.checked).length;
+    selectAll.checked = checkboxes.length > 0 && checkedCount === checkboxes.length;
+    selectAll.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
+  }
+}
+
+async function reactivateSelectedStoppedSubscribers() {
+  if (selectedStoppedIds.size === 0) return;
+  if (!confirm(`هل أنت متأكد من إعادة تفعيل ${selectedStoppedIds.size} مشترك؟`))
+    return;
+
+  try {
+    const response = await authenticatedFetch("/api/subscribers/reactivate-bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: Array.from(selectedStoppedIds) }),
+    });
+    const result = await response.json();
+
+    if (result.success) {
+      selectedStoppedIds.clear();
+      updateStoppedSelectionUI();
+      showToast(result.message || "تمت إعادة التفعيل بنجاح", "success");
+      loadStoppedSubscribers();
+      loadSubscribers();
+      loadStats();
+      loadAvailableUsernames();
+    } else {
+      showToast(result.message || "فشل في إعادة التفعيل", "error");
+    }
+  } catch (error) {
+    console.error("Error bulk reactivating stopped subscribers:", error);
+    showToast("خطأ في إعادة التفعيل الجماعي", "error");
+  }
 }
 
 // Open stop subscriber modal
@@ -3407,11 +3598,14 @@ switchSection = async function (sectionId) {
 document.addEventListener("DOMContentLoaded", () => {
   setupNewFeatureListeners();
   setupExpiringUsernamesListeners();
+  setupStoppedSubscribersListeners();
 });
 
 // SMS helpers: populate dropdown and handle sending
 // SMS recipients cache used by suggestions
 let smsRecipients = [];
+let selectedSmsRecipients = new Map();
+let pendingSmsPrefillRecipients = [];
 
 function populateSmsSubscriberDropdown() {
   try {
@@ -3421,19 +3615,24 @@ function populateSmsSubscriberDropdown() {
       const phone = (sub.phone || "").toString().trim();
       if (!phone) return;
       const label = `${sub.fullName || sub.username || "مشترك"} — ${phone}`;
-      smsRecipients.push({ label, phone });
+      smsRecipients.push({
+        id: String(sub._id || sub.id || phone),
+        label,
+        name: sub.fullName || sub.username || "مشترك",
+        phone,
+      });
     });
 
-    // Reset search input and hidden phone
+    // Reset search input
     const searchInput = document.getElementById("smsSubscriberSearch");
-    const hiddenPhone = document.getElementById("smsSelectedPhone");
     const suggestions = document.getElementById("smsSuggestions");
     if (searchInput) searchInput.value = "";
-    if (hiddenPhone) hiddenPhone.value = "";
     if (suggestions) {
       suggestions.innerHTML = "";
       suggestions.style.display = "none";
     }
+    renderSmsSelectedRecipients();
+    applyPendingSmsPrefill();
   } catch (e) {
     console.error("populateSmsSubscriberDropdown error:", e);
   }
@@ -3448,7 +3647,9 @@ function showSmsSuggestions(query) {
 
   const q = query.toString().trim().toLowerCase();
   const matches = smsRecipients.filter(
-    (r) => r.label.toLowerCase().includes(q) || r.phone.includes(q),
+    (r) =>
+      !selectedSmsRecipients.has(r.phone) &&
+      (r.label.toLowerCase().includes(q) || r.phone.includes(q)),
   );
 
   // Limit to 25 results
@@ -3472,14 +3673,71 @@ function showSmsSuggestions(query) {
 
 function selectSmsRecipient(item) {
   const searchInput = document.getElementById("smsSubscriberSearch");
-  const hiddenPhone = document.getElementById("smsSelectedPhone");
   const suggestions = document.getElementById("smsSuggestions");
   if (searchInput) searchInput.value = item.label;
-  if (hiddenPhone) hiddenPhone.value = item.phone;
+  selectedSmsRecipients.set(item.phone, item);
+  renderSmsSelectedRecipients();
   if (suggestions) {
     suggestions.innerHTML = "";
     suggestions.style.display = "none";
   }
+}
+
+function renderSmsSelectedRecipients() {
+  const container = document.getElementById("smsSelectedRecipients");
+  const badge = document.getElementById("smsSelectedCountBadge");
+  const clearBtn = document.getElementById("smsClearSelectedBtn");
+  if (!container || !badge) return;
+
+  const selected = Array.from(selectedSmsRecipients.values());
+  badge.textContent = `المحددون: ${selected.length}`;
+  if (clearBtn) {
+    clearBtn.style.display = selected.length > 0 ? "inline-flex" : "none";
+  }
+
+  if (selected.length === 0) {
+    container.innerHTML =
+      '<div class="sms-empty-selected">لا يوجد مشتركون محددون حالياً</div>';
+    return;
+  }
+
+  container.innerHTML = selected
+    .map(
+      (item) => `
+      <div class="sms-recipient-chip">
+        <span class="sms-recipient-name">${escapeHtml(item.name || "مشترك")}</span>
+        <span class="sms-recipient-phone">${escapeHtml(item.phone)}</span>
+        <button type="button" class="sms-chip-remove" onclick="removeSmsRecipient('${String(item.phone).replace(/'/g, "\\'")}')">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    `,
+    )
+    .join("");
+}
+
+function removeSmsRecipient(phone) {
+  selectedSmsRecipients.delete(phone);
+  renderSmsSelectedRecipients();
+}
+
+function applyPendingSmsPrefill() {
+  if (!Array.isArray(pendingSmsPrefillRecipients)) return;
+  if (pendingSmsPrefillRecipients.length === 0) return;
+
+  pendingSmsPrefillRecipients.forEach((incoming) => {
+    const phone = String(incoming.phone || "").trim();
+    if (!phone) return;
+    selectedSmsRecipients.set(phone, {
+      id: incoming.id || phone,
+      name: incoming.name || "مشترك",
+      label: `${incoming.name || "مشترك"} — ${phone}`,
+      phone,
+    });
+  });
+
+  pendingSmsPrefillRecipients = [];
+  renderSmsSelectedRecipients();
 }
 
 function escapeHtml(str) {
@@ -3494,19 +3752,21 @@ function escapeHtml(str) {
 async function handleSmsSubmit(e) {
   try {
     e.preventDefault();
-    const hiddenPhone = document.getElementById("smsSelectedPhone");
     const customPhoneInput = document.getElementById("smsCustomPhone");
     const recipientType =
       document.querySelector('input[name="smsRecipientType"]:checked')
         ?.value || "subscriber";
     const messageEl = document.getElementById("smsMessage");
-    if (!hiddenPhone || !messageEl) return;
+    if (!messageEl) return;
 
     let phone = "";
+    let phones = [];
     if (recipientType === "custom" && customPhoneInput) {
       phone = customPhoneInput.value.trim();
     } else {
-      phone = hiddenPhone.value;
+      phones = Array.from(selectedSmsRecipients.values()).map((item) =>
+        String(item.phone || "").trim(),
+      );
     }
 
     const message = messageEl.value.trim();
@@ -3516,8 +3776,8 @@ async function handleSmsSubmit(e) {
       return;
     }
 
-    if (recipientType === "subscriber" && !phone) {
-      showToast("يرجى اختيار مشترك من القائمة أولاً", "error");
+    if (recipientType === "subscriber" && phones.length === 0) {
+      showToast("يرجى اختيار مشترك واحد على الأقل", "error");
       return;
     }
 
@@ -3526,7 +3786,8 @@ async function handleSmsSubmit(e) {
       return;
     }
 
-    const payload = { phone, message };
+    const payload =
+      recipientType === "custom" ? { phone, message } : { phones, message };
     const response = await authenticatedFetch("/api/subscribers/sms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -3535,8 +3796,23 @@ async function handleSmsSubmit(e) {
 
     const result = await response.json();
     if (result.success) {
-      showToast("تم إرسال الرسالة بنجاح", "success");
+      if (recipientType === "subscriber") {
+        const sentCount = result?.data?.sentCount ?? phones.length;
+        const failedCount = result?.data?.failedCount ?? 0;
+        showToast(
+          failedCount > 0
+            ? `تم إرسال ${sentCount} وفشل ${failedCount}`
+            : `تم إرسال الرسالة إلى ${sentCount} مشترك`,
+          failedCount > 0 ? "warning" : "success",
+        );
+      } else {
+        showToast("تم إرسال الرسالة بنجاح", "success");
+      }
       messageEl.value = "";
+      if (recipientType === "subscriber") {
+        selectedSmsRecipients.clear();
+        renderSmsSelectedRecipients();
+      }
     } else {
       showToast(result.message || "فشل الإرسال", "error");
     }
@@ -3564,6 +3840,10 @@ function setupExpiringUsernamesListeners() {
     .getElementById("bulkChangeUsernamesBtn")
     ?.addEventListener("click", openBulkChangeUsernamesModal);
 
+  document
+    .getElementById("sendExpiringSmsBtn")
+    ?.addEventListener("click", sendSelectedExpiringToSms);
+
   // Speed filters
   document
     .getElementById("expiring4MFilter")
@@ -3577,14 +3857,20 @@ function setupExpiringUsernamesListeners() {
     .getElementById("bulkChangeSpeed")
     ?.addEventListener("change", updateAvailableCountForBulk);
 
-  // Search by old username
-  document
-    .getElementById("searchOldUsernameBtn")
-    ?.addEventListener("click", searchByOldUsername);
+  // Live search by old username (without button click)
+  document.getElementById("oldUsernameSearchInput")?.addEventListener("input", () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => searchByOldUsername(true), 300);
+  });
+
   document
     .getElementById("oldUsernameSearchInput")
     ?.addEventListener("keypress", (e) => {
-      if (e.key === "Enter") searchByOldUsername();
+      if (e.key === "Enter") {
+        e.preventDefault();
+        clearTimeout(searchTimeout);
+        searchByOldUsername();
+      }
     });
 }
 
@@ -3712,12 +3998,52 @@ function handleSelectAllExpiring(e) {
 // Update selected count for expiring usernames
 function updateExpiringSelectedCount() {
   const countSpan = document.getElementById("expiringSelectedCount");
+  const smsCountSpan = document.getElementById("expiringSmsSelectedCount");
   const bulkBtn = document.getElementById("bulkChangeUsernamesBtn");
+  const sendSmsBtn = document.getElementById("sendExpiringSmsBtn");
 
   if (countSpan) countSpan.textContent = selectedExpiringIds.size;
+  if (smsCountSpan) smsCountSpan.textContent = selectedExpiringIds.size;
   if (bulkBtn)
     bulkBtn.style.display =
       selectedExpiringIds.size > 0 ? "inline-block" : "none";
+  if (sendSmsBtn)
+    sendSmsBtn.style.display =
+      selectedExpiringIds.size > 0 ? "inline-block" : "none";
+}
+
+function sendSelectedExpiringToSms() {
+  if (selectedExpiringIds.size === 0) {
+    showToast("يرجى تحديد مشترك واحد على الأقل", "error");
+    return;
+  }
+
+  const selected = expiringUsernamesData
+    .filter((sub) => selectedExpiringIds.has(sub._id))
+    .map((sub) => ({
+      id: String(sub._id || sub.id || sub.phone || ""),
+      name: sub.fullName || sub.username || "مشترك",
+      phone: String(sub.phone || "").trim(),
+    }))
+    .filter((sub) => sub.phone);
+
+  if (selected.length === 0) {
+    showToast("المشتركون المحددون لا يحتويون على أرقام هاتف صالحة", "error");
+    return;
+  }
+
+  // Deduplicate by phone before passing to SMS section.
+  const deduped = Array.from(
+    new Map(selected.map((item) => [item.phone, item])).values(),
+  );
+
+  pendingSmsPrefillRecipients = deduped;
+  const searchInput = document.getElementById("smsSubscriberSearch");
+  if (searchInput) searchInput.value = "";
+
+  window.location.hash = "sms";
+  handleHashChange();
+  showToast(`تم تجهيز ${deduped.length} مشترك في شاشة SMS`, "success");
 }
 
 // Open bulk change usernames modal
@@ -3864,13 +4190,19 @@ async function confirmBulkChangeUsernames() {
 }
 
 // Search by old username
-async function searchByOldUsername() {
+async function searchByOldUsername(isSilent = false) {
   const searchInput = document.getElementById("oldUsernameSearchInput");
   const resultDiv = document.getElementById("oldUsernameSearchResult");
   const username = searchInput.value.trim();
 
   if (!username) {
-    alert("يرجى إدخال اسم المستخدم للبحث");
+    if (resultDiv) {
+      resultDiv.style.display = "none";
+      resultDiv.innerHTML = "";
+    }
+    if (!isSilent) {
+      alert("يرجى إدخال اسم المستخدم للبحث");
+    }
     return;
   }
 

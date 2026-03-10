@@ -28,6 +28,7 @@ import {
   getStoppedSubscribers,
   stopSubscriber,
   reactivateSubscriber,
+  bulkReactivateSubscribers,
   deleteStoppedSubscriber,
   getExpiringUsernames,
   bulkChangeUsernames,
@@ -88,6 +89,7 @@ router.post("/assign-username", assignUsernameToSubscriber);
 router.get("/stopped", getStoppedSubscribers);
 router.post("/stop/:id", stopSubscriber);
 router.post("/reactivate/:id", reactivateSubscriber);
+router.post("/reactivate-bulk", bulkReactivateSubscribers);
 router.delete("/stopped/:id", deleteStoppedSubscriber);
 
 // Expiring usernames routes
