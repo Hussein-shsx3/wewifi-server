@@ -23,6 +23,49 @@ const getBoundSpeedForUsername = (
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 4;
 };
 
+const resolveAssignedCycleFromAvailable = (
+  availableRow: any,
+): {
+  firstContactDate: string;
+  disconnectionDate: string;
+  isFreshCycle: boolean;
+} => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const hasExistingCycle =
+    !!availableRow?.firstContactDate && !!availableRow?.expiryDate;
+
+  if (hasExistingCycle) {
+    const existingFirst = parseAsLocalDate(availableRow.firstContactDate);
+    const existingEnd = parseAsLocalDate(availableRow.expiryDate);
+
+    if (existingFirst && existingEnd) {
+      // If already expired, start a fresh cycle from today.
+      if (existingEnd.getTime() < today.getTime()) {
+        return {
+          firstContactDate: formatDateForMySQL(today) as string,
+          disconnectionDate: calculateDisconnectionDate(today) as string,
+          isFreshCycle: true,
+        };
+      }
+
+      return {
+        firstContactDate: formatDateForMySQL(existingFirst) as string,
+        disconnectionDate: formatDateForMySQL(existingEnd) as string,
+        isFreshCycle: false,
+      };
+    }
+  }
+
+  // Never used before -> start first 31-day cycle now.
+  return {
+    firstContactDate: formatDateForMySQL(today) as string,
+    disconnectionDate: calculateDisconnectionDate(today) as string,
+    isFreshCycle: true,
+  };
+};
+
 // Helper function to check if database is available
 const isDBAvailable = () => {
   if (noDBMode) return false;
@@ -441,7 +484,7 @@ export const createSubscriber = async (req: Request, res: Response) => {
 
     // Username/password/speed must come from available_usernames.
     const [availableRows] = await pool.execute<RowDataPacket[]>(
-      "SELECT id, username, password, speed FROM available_usernames WHERE id = ? AND (isUsed = FALSE OR isUsed IS NULL)",
+      "SELECT id, username, password, speed, firstContactDate, expiryDate FROM available_usernames WHERE id = ? AND (isUsed = FALSE OR isUsed IS NULL)",
       [availableUsernameId],
     );
 
@@ -459,6 +502,7 @@ export const createSubscriber = async (req: Request, res: Response) => {
       selectedAvailable.username,
       selectedAvailable.speed,
     );
+    const cycle = resolveAssignedCycleFromAvailable(selectedAvailable);
 
     // Extract line number from package name (required for ID generation)
     const lineNumber = parseInt(extractPackageNumber(packageName), 10);
@@ -511,8 +555,8 @@ export const createSubscriber = async (req: Request, res: Response) => {
         lineNumber,
         monthlyPrice || 0,
         formatDateForMySQL(startDate) || formatDateForMySQL(new Date()),
-        formatDateForMySQL(firstContactDate),
-        disconnectionDate,
+        formatDateForMySQL(firstContactDate) || cycle.firstContactDate,
+        disconnectionDate || cycle.disconnectionDate,
         true,
         isSuspended,
         notes || null,
@@ -1904,7 +1948,7 @@ export const changeSubscriberUsername = async (req: Request, res: Response) => {
 
     // New username must come from available_usernames so speed is tied to username speed.
     const [availableRows] = await pool.execute<RowDataPacket[]>(
-      "SELECT id, username, password, speed FROM available_usernames WHERE username = ? AND (isUsed = FALSE OR isUsed IS NULL)",
+      "SELECT id, username, password, speed, firstContactDate, expiryDate FROM available_usernames WHERE username = ? AND (isUsed = FALSE OR isUsed IS NULL)",
       [newUsername],
     );
     if (availableRows.length === 0) {
@@ -1967,9 +2011,8 @@ export const changeSubscriberUsername = async (req: Request, res: Response) => {
       }
     }
 
-    // Update subscriber with selected username/speed and start a fresh 31-day cycle.
-    const today = new Date();
-    const newDisconnectionDate = calculateDisconnectionDate(today);
+    // If this username already started before, continue its existing cycle.
+    const cycle = resolveAssignedCycleFromAvailable(selectedAvailable);
     const finalPassword =
       newPassword && String(newPassword).trim()
         ? String(newPassword).trim()
@@ -1984,8 +2027,8 @@ export const changeSubscriberUsername = async (req: Request, res: Response) => {
           selectedAvailable.username,
           selectedAvailable.speed,
         ),
-        formatDateForMySQL(today),
-        newDisconnectionDate,
+        cycle.firstContactDate,
+        cycle.disconnectionDate,
         id,
       ],
     );
@@ -2005,8 +2048,8 @@ export const changeSubscriberUsername = async (req: Request, res: Response) => {
           selectedAvailable.username,
           selectedAvailable.speed,
         ),
-        firstContactDate: formatDateForMySQL(today),
-        disconnectionDate: newDisconnectionDate,
+        firstContactDate: cycle.firstContactDate,
+        disconnectionDate: cycle.disconnectionDate,
       },
     });
   } catch (error) {
@@ -2952,9 +2995,8 @@ export const assignUsernameToSubscriber = async (
       }
     }
 
-    // Update subscriber with new username, speed and reset firstContactDate/disconnectionDate
-    const today = new Date();
-    const newDisconnectionDate = calculateDisconnectionDate(today);
+    // If this username already started before, continue its existing cycle.
+    const cycle = resolveAssignedCycleFromAvailable(availableUsername);
     const newSpeed = getBoundSpeedForUsername(
       availableUsername.username,
       availableUsername.speed,
@@ -2966,8 +3008,8 @@ export const assignUsernameToSubscriber = async (
         availableUsername.username,
         availableUsername.password,
         newSpeed,
-        formatDateForMySQL(today),
-        newDisconnectionDate,
+        cycle.firstContactDate,
+        cycle.disconnectionDate,
         subscriberId,
       ],
     );
@@ -2984,8 +3026,8 @@ export const assignUsernameToSubscriber = async (
         oldUsername: subscriber.username,
         newUsername: availableUsername.username,
         newSpeed,
-        firstContactDate: formatDateForMySQL(today),
-        disconnectionDate: newDisconnectionDate,
+        firstContactDate: cycle.firstContactDate,
+        disconnectionDate: cycle.disconnectionDate,
         subscriberId,
       },
     });
@@ -3572,10 +3614,7 @@ export const bulkChangeUsernames = async (req: Request, res: Response) => {
             ],
           );
 
-          // Calculate new dates
-          const today = new Date();
-          const newFirstContactDate = formatDateForMySQL(today);
-          const newDisconnectionDate = calculateDisconnectionDate(today);
+          const cycle = resolveAssignedCycleFromAvailable(availableUsername);
 
           // Update subscriber with new username, password, and new dates (keep same speed)
           await pool.execute(
@@ -3583,8 +3622,8 @@ export const bulkChangeUsernames = async (req: Request, res: Response) => {
             [
               availableUsername.username,
               availableUsername.password,
-              newFirstContactDate,
-              newDisconnectionDate,
+              cycle.firstContactDate,
+              cycle.disconnectionDate,
               subscriber.id,
             ],
           );
