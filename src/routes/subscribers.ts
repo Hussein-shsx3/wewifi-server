@@ -19,6 +19,7 @@ import {
   getAvailableUsernames,
   addAvailableUsername,
   uploadAvailableUsernames,
+  exportAvailableUsernames,
   deleteAvailableUsername,
   updateAvailableUsername,
   deleteAllAvailableUsernames,
@@ -80,6 +81,7 @@ router.post(
   upload.single("file"),
   uploadAvailableUsernames,
 );
+router.get("/available-usernames/export", exportAvailableUsernames);
 router.delete("/available-usernames/all", deleteAllAvailableUsernames);
 router.post("/available-usernames/cleanup", cleanupInvalidUsernames);
 router.put("/available-usernames/:id", updateAvailableUsername);

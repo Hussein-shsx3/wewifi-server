@@ -85,6 +85,7 @@ const createTables = async () => {
       username VARCHAR(100) NOT NULL UNIQUE,
       password VARCHAR(100),
       \`package\` VARCHAR(200),
+      startDate DATE NULL,
       isUsed BOOLEAN DEFAULT FALSE,
       createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_username (username),
@@ -374,6 +375,16 @@ const createTables = async () => {
         "⚠️ Failed to add firstContactDate column:",
         (e as Error).message,
       );
+    }
+
+    // Add startDate column to available_usernames for request date tracking
+    try {
+      await pool.execute(
+        "ALTER TABLE available_usernames ADD COLUMN startDate DATE NULL",
+      );
+      console.log("✓ Added startDate column to available_usernames");
+    } catch (e) {
+      console.log("⚠️ Failed to add startDate column:", (e as Error).message);
     }
 
     console.log("✓ Table schema updated (nullable fields)");

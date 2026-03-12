@@ -809,6 +809,9 @@
               <button class="action-btn primary" onclick="showAddAvailableUsernameForm(currentSpeedTab)">
                 إضافة جديد
               </button>
+              <button class="action-btn" onclick="exportAvailableUsernamesExcel(currentSpeedTab)">
+                تصدير Excel
+              </button>
               <button class="action-btn success" onclick="showUploadAvailableUsernamesArea(currentSpeedTab)">
                 استيراد Excel
               </button>
@@ -824,6 +827,7 @@
                   <tr>
                     <th>اسم المستخدم</th>
                     <th>كلمة المرور</th>
+                    <th>تاريخ طلب الاشتراك</th>
                     <th>الأيام المتبقية</th>
                     <th></th>
                   </tr>
@@ -840,6 +844,7 @@
                   <tr>
                     <th>اسم المستخدم</th>
                     <th>كلمة المرور</th>
+                    <th>تاريخ طلب الاشتراك</th>
                     <th>الأيام المتبقية</th>
                     <th></th>
                   </tr>
@@ -864,6 +869,10 @@
                   <label>كلمة المرور</label>
                   <input type="text" id="availablePassword" name="password">
                 </div>
+                <div class="input-group">
+                  <label>تاريخ طلب الاشتراك</label>
+                  <input type="date" id="availableStartDate" name="startDate">
+                </div>
                 <div class="modal-actions">
                   <button type="submit" class="action-btn primary">حفظ</button>
                   <button type="button" class="action-btn secondary"
@@ -885,7 +894,8 @@
                   onchange="uploadAvailableUsernamesExcel(this.files)">
               </div>
               <div class="upload-hint">
-                <p>الأعمدة المطلوبة: <code>Username</code> و <code>Password</code></p>
+                <p>الأعمدة المطلوبة: <code>Username</code> و <code>Password</code>، واختياري
+                  <code>تاريخ طلب الاشتراك</code></p>
               </div>
               <div class="modal-actions">
                 <button type="button" class="action-btn secondary"
@@ -907,6 +917,25 @@
                 <div class="input-group">
                   <label>كلمة المرور</label>
                   <input type="text" id="editAvailablePasswordInput">
+                </div>
+                <div class="input-group">
+                  <label>تاريخ طلب الاشتراك</label>
+                  <input type="date" id="editAvailableStartDateInput">
+                </div>
+                <div class="input-group">
+                  <label>طريقة حساب المتبقي</label>
+                  <select id="editAvailableCycleMode">
+                    <option value="firstContactDate">عن طريق تاريخ أول اتصال</option>
+                    <option value="remainingDays">عن طريق الأيام المتبقية</option>
+                  </select>
+                </div>
+                <div class="input-group" id="editFirstContactGroup">
+                  <label>تاريخ أول اتصال</label>
+                  <input type="date" id="editAvailableFirstContactDateInput">
+                </div>
+                <div class="input-group" id="editRemainingDaysGroup" style="display: none;">
+                  <label>الأيام المتبقية</label>
+                  <input type="number" id="editAvailableRemainingDaysInput" min="1" max="31" placeholder="1 - 31">
                 </div>
                 <div class="modal-actions">
                   <button type="submit" class="action-btn primary">حفظ</button>

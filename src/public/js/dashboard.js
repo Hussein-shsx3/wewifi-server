@@ -2782,7 +2782,7 @@ function displayAvailableUsernamesBySpeed(usernames, speed) {
 
   if (!usernames || usernames.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="4" class="text-center">لا توجد أسماء مستخدمين متاحة</td></tr>';
+      '<tr><td colspan="5" class="text-center">لا توجد أسماء مستخدمين متاحة</td></tr>';
     return;
   }
 
@@ -2798,10 +2798,11 @@ function displayAvailableUsernamesBySpeed(usernames, speed) {
     row.innerHTML = `
       <td><strong>${u.username}</strong></td>
       <td><code>${u.password || "-"}</code></td>
+      <td>${u.startDate ? formatDate(u.startDate) : "-"}</td>
       <td><span class="remaining-days-badge ${daysClass}">${remainingDays} يوم</span></td>
       <td>
         <div class="row-actions">
-          <button class="row-btn edit" onclick="openEditAvailableUsername(${u.id}, '${u.username}', '${u.password || ""}')" title="تعديل">تعديل</button>
+          <button class="row-btn edit" onclick="openEditAvailableUsername(${u.id})" title="تعديل">تعديل</button>
           <button class="row-btn delete" onclick="deleteAvailableUsername(${u.id})" title="حذف">حذف</button>
         </div>
       </td>
@@ -2811,10 +2812,22 @@ function displayAvailableUsernamesBySpeed(usernames, speed) {
 }
 
 // Open edit available username modal
-function openEditAvailableUsername(id, username, password) {
+function openEditAvailableUsername(id) {
+  const item = allAvailableUsernames.find((u) => String(u.id) === String(id));
   document.getElementById("editAvailableUsernameId").value = id;
-  document.getElementById("editAvailableUsernameInput").value = username;
-  document.getElementById("editAvailablePasswordInput").value = password;
+  document.getElementById("editAvailableUsernameInput").value = item?.username || "";
+  document.getElementById("editAvailablePasswordInput").value = item?.password || "";
+  document.getElementById("editAvailableStartDateInput").value = formatDateForInput(
+    item?.startDate,
+  );
+  document.getElementById("editAvailableFirstContactDateInput").value =
+    formatDateForInput(item?.firstContactDate);
+  document.getElementById("editAvailableRemainingDaysInput").value =
+    item?.remainingDays !== undefined ? String(item.remainingDays) : "31";
+  document.getElementById("editAvailableCycleMode").value = item?.firstContactDate
+    ? "firstContactDate"
+    : "remainingDays";
+  handleEditAvailableCycleModeChange();
   document.getElementById("editAvailableUsernameModal").style.display = "flex";
 }
 
@@ -2828,10 +2841,38 @@ async function handleEditAvailableUsernameSubmit(e) {
   e.preventDefault();
 
   const id = document.getElementById("editAvailableUsernameId").value;
+  const cycleMode = document.getElementById("editAvailableCycleMode").value;
   const data = {
     username: document.getElementById("editAvailableUsernameInput").value,
     password: document.getElementById("editAvailablePasswordInput").value,
+    startDate: document.getElementById("editAvailableStartDateInput").value || null,
+    cycleMode,
+    firstContactDate:
+      cycleMode === "firstContactDate"
+        ? document.getElementById("editAvailableFirstContactDateInput").value ||
+          null
+        : null,
+    remainingDays:
+      cycleMode === "remainingDays"
+        ? Number(document.getElementById("editAvailableRemainingDaysInput").value)
+        : null,
   };
+
+  if (!data.username?.trim()) {
+    alert("اسم المستخدم مطلوب");
+    return;
+  }
+  if (cycleMode === "firstContactDate" && !data.firstContactDate) {
+    alert("يرجى إدخال تاريخ أول اتصال");
+    return;
+  }
+  if (
+    cycleMode === "remainingDays" &&
+    (!data.remainingDays || data.remainingDays < 1 || data.remainingDays > 31)
+  ) {
+    alert("الأيام المتبقية يجب أن تكون بين 1 و31");
+    return;
+  }
 
   try {
     const response = await authenticatedFetch(
@@ -2853,6 +2894,20 @@ async function handleEditAvailableUsernameSubmit(e) {
   } catch (error) {
     console.error("Error updating available username:", error);
     alert("خطأ في تحديث اسم المستخدم");
+  }
+}
+
+function handleEditAvailableCycleModeChange() {
+  const mode = document.getElementById("editAvailableCycleMode")?.value;
+  const firstContactGroup = document.getElementById("editFirstContactGroup");
+  const remainingGroup = document.getElementById("editRemainingDaysGroup");
+
+  if (mode === "remainingDays") {
+    if (firstContactGroup) firstContactGroup.style.display = "none";
+    if (remainingGroup) remainingGroup.style.display = "block";
+  } else {
+    if (firstContactGroup) firstContactGroup.style.display = "block";
+    if (remainingGroup) remainingGroup.style.display = "none";
   }
 }
 
@@ -2921,6 +2976,7 @@ async function addAvailableUsername(e) {
   const username = document.getElementById("availableUsername").value.trim();
   const password = document.getElementById("availablePassword").value.trim();
   const speed = document.getElementById("availableUsernameSpeed").value;
+  const startDate = document.getElementById("availableStartDate").value || null;
 
   if (!username) {
     alert("يرجى إدخال اسم المستخدم");
@@ -2933,7 +2989,7 @@ async function addAvailableUsername(e) {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, speed }),
+        body: JSON.stringify({ username, password, speed, startDate }),
       },
     );
 
@@ -3018,6 +3074,32 @@ async function uploadAvailableUsernamesExcel(files) {
   }
 }
 
+async function exportAvailableUsernamesExcel(speed) {
+  try {
+    const response = await authenticatedFetch(
+      `/api/subscribers/available-usernames/export?speed=${speed || currentSpeedTab}`,
+    );
+
+    if (response.ok) {
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `available_usernames_${speed || currentSpeedTab}m_${new Date().toISOString().split("T")[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+    } else {
+      const result = await response.json();
+      alert("خطأ في التصدير: " + (result.message || "خطأ غير معروف"));
+    }
+  } catch (error) {
+    console.error("Error exporting available usernames:", error);
+    alert("خطأ في تصدير الملف");
+  }
+}
+
 // Setup event listeners for new features
 function setupNewFeatureListeners() {
   // Profile edit form submit
@@ -3062,6 +3144,9 @@ function setupNewFeatureListeners() {
   document
     .getElementById("editAvailableUsernameForm")
     ?.addEventListener("submit", handleEditAvailableUsernameSubmit);
+  document
+    .getElementById("editAvailableCycleMode")
+    ?.addEventListener("change", handleEditAvailableCycleModeChange);
 
   // SMS form
   document

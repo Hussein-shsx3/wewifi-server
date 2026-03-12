@@ -2357,7 +2357,7 @@ export const getAvailableUsernames = async (req: Request, res: Response) => {
     let query = `
       SELECT 
         id, username, password, speed, isUsed, createdAt,
-        firstContactDate, expiryDate,
+        startDate, firstContactDate, expiryDate,
         CASE 
           WHEN expiryDate IS NOT NULL THEN DATEDIFF(expiryDate, CURDATE()) + 1
           ELSE 31
@@ -2403,7 +2403,7 @@ export const getAvailableUsernames = async (req: Request, res: Response) => {
 // Add single available username
 export const addAvailableUsername = async (req: Request, res: Response) => {
   try {
-    const { username, password, speed } = req.body;
+    const { username, password, speed, startDate } = req.body;
     const pool = getPool();
 
     if (!pool) {
@@ -2459,8 +2459,8 @@ export const addAvailableUsername = async (req: Request, res: Response) => {
     }
 
     await pool.execute(
-      "INSERT INTO available_usernames (username, password, speed) VALUES (?, ?, ?)",
-      [username, password || null, speed || 4],
+      "INSERT INTO available_usernames (username, password, speed, startDate) VALUES (?, ?, ?, ?)",
+      [username, password || null, speed || 4, formatDateForMySQL(startDate)],
     );
 
     res.json({
@@ -2631,6 +2631,12 @@ export const uploadAvailableUsernames = async (req: Request, res: Response) => {
       try {
         const username = row.Username || row.username || row["اسم المستخدم"];
         const password = row.Password || row.password || row["كلمة المرور"];
+        const startDateRaw =
+          row["تاريخ طلب الاشتراك"] ||
+          row["التاريخ"] ||
+          row["startDate"] ||
+          row["Start Date"] ||
+          null;
 
         // Skip if both username and password are empty
         if (!username && !password) continue;
@@ -2693,8 +2699,8 @@ export const uploadAvailableUsernames = async (req: Request, res: Response) => {
         }
 
         await pool.execute(
-          "INSERT INTO available_usernames (username, password, speed) VALUES (?, ?, ?)",
-          [username, password || null, speed],
+          "INSERT INTO available_usernames (username, password, speed, startDate) VALUES (?, ?, ?, ?)",
+          [username, password || null, speed, formatDateForMySQL(startDateRaw)],
         );
         added++;
       } catch (e) {
@@ -2722,6 +2728,68 @@ export const uploadAvailableUsernames = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: "Error uploading available usernames",
+      error,
+    });
+  }
+};
+
+export const exportAvailableUsernames = async (req: Request, res: Response) => {
+  try {
+    const pool = getPool();
+    const speed = Number(req.query.speed || 0);
+
+    if (!pool) {
+      return res
+        .status(503)
+        .json({ success: false, message: "Database not available" });
+    }
+
+    const params: any[] = [];
+    let whereClause = "WHERE (isUsed = FALSE OR isUsed IS NULL)";
+    if (speed) {
+      whereClause += " AND speed = ?";
+      params.push(speed);
+    }
+
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT username, password, speed, startDate, firstContactDate, expiryDate,
+              CASE WHEN expiryDate IS NOT NULL THEN DATEDIFF(expiryDate, CURDATE()) + 1 ELSE 31 END AS remainingDays
+       FROM available_usernames
+       ${whereClause}
+       ORDER BY speed ASC, id ASC`,
+      params,
+    );
+
+    const excelData = rows.map((u: any) => ({
+      "اسم المستخدم": u.username || "-",
+      "كلمة المرور": u.password || "-",
+      السرعة: `${u.speed || 4} ميجا`,
+      "تاريخ طلب الاشتراك": u.startDate ? formatDateForMySQL(u.startDate) : "-",
+      "تاريخ اول اتصال": u.firstContactDate
+        ? formatDateForMySQL(u.firstContactDate)
+        : "-",
+      "تاريخ الفصل": u.expiryDate ? formatDateForMySQL(u.expiryDate) : "-",
+      "الأيام المتبقية": Math.max(0, Number(u.remainingDays ?? 31)),
+    }));
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    XLSX.utils.book_append_sheet(workbook, worksheet, "أسماء_متاحة");
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+
+    const suffix = speed ? `_${speed}m` : "_all";
+    const fileName = `available_usernames${suffix}_${new Date().toISOString().split("T")[0]}.xlsx`;
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.send(buffer);
+  } catch (error) {
+    console.error("Error exporting available usernames:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error exporting available usernames",
       error,
     });
   }
@@ -2813,7 +2881,14 @@ export const deleteAvailableUsername = async (req: Request, res: Response) => {
 export const updateAvailableUsername = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { username, password } = req.body;
+    const {
+      username,
+      password,
+      startDate,
+      cycleMode,
+      firstContactDate,
+      remainingDays,
+    } = req.body;
     const pool = getPool();
 
     if (!pool) {
@@ -2822,9 +2897,33 @@ export const updateAvailableUsername = async (req: Request, res: Response) => {
         .json({ success: false, message: "Database not available" });
     }
 
+    let normalizedFirstContactDate = formatDateForMySQL(firstContactDate);
+    let normalizedExpiryDate = normalizedFirstContactDate
+      ? calculateDisconnectionDate(normalizedFirstContactDate)
+      : null;
+
+    if (cycleMode === "remainingDays") {
+      const days = Math.max(1, Math.min(31, Number(remainingDays) || 31));
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const expiry = new Date(today);
+      expiry.setDate(expiry.getDate() + (days - 1));
+      const first = new Date(expiry);
+      first.setDate(first.getDate() - 30);
+      normalizedFirstContactDate = formatDateForMySQL(first);
+      normalizedExpiryDate = formatDateForMySQL(expiry);
+    }
+
     const [result] = await pool.execute<ResultSetHeader>(
-      "UPDATE available_usernames SET username = ?, password = ? WHERE id = ?",
-      [username, password || null, id],
+      "UPDATE available_usernames SET username = ?, password = ?, startDate = ?, firstContactDate = ?, expiryDate = ? WHERE id = ?",
+      [
+        username,
+        password || null,
+        formatDateForMySQL(startDate),
+        normalizedFirstContactDate,
+        normalizedExpiryDate,
+        id,
+      ],
     );
 
     if (result.affectedRows === 0) {
