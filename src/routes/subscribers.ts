@@ -12,6 +12,7 @@ import {
   bulkDelete,
   bulkUpdate,
   exportSubscribers,
+  exportBackupData,
   getSubscriberProfile,
   changeSubscriberUsername,
   getUsernameHistory,
@@ -54,6 +55,7 @@ router.get("/dashboard-stats", getDashboardStats);
 // Main subscriber routes
 router.get("/", getSubscribers);
 router.get("/export", exportSubscribers);
+router.get("/export-backup", exportBackupData);
 router.get("/about-to-disconnect", getSubscribersAboutToDisconnect);
 router.post("/", createSubscriber);
 router.put("/:id", updateSubscriber);

@@ -1830,6 +1830,134 @@ export const exportSubscribers = async (req: Request, res: Response) => {
   }
 };
 
+// Export full backup data (subscribers, stopped subscribers, available usernames)
+export const exportBackupData = async (req: Request, res: Response) => {
+  try {
+    const pool = getPool();
+
+    if (!pool) {
+      return res
+        .status(503)
+        .json({ success: false, message: "Database not available" });
+    }
+
+    const [subscribers] = await pool.execute<RowDataPacket[]>(
+      `SELECT id, username, password, fullName, facilityType, phone, \`package\`,
+              monthlyPrice, startDate, firstContactDate, disconnectionDate, speed, notes, createdAt
+       FROM subscribers
+       ORDER BY createdAt DESC, id DESC`,
+    );
+
+    const [stoppedSubscribers] = await pool.execute<RowDataPacket[]>(
+      `SELECT original_id, username, password, fullName, facilityType, phone, \`package\`,
+              startDate, firstContactDate, disconnectionDate, speed, notes, stoppedAt, stoppedReason
+       FROM stopped_subscribers
+       ORDER BY stoppedAt DESC, id DESC`,
+    );
+
+    const [available4M] = await pool.execute<RowDataPacket[]>(
+      `SELECT username, password, speed, startDate, firstContactDate, expiryDate,
+              CASE WHEN expiryDate IS NOT NULL THEN DATEDIFF(expiryDate, CURDATE()) + 1 ELSE 31 END AS remainingDays,
+              createdAt
+       FROM available_usernames
+       WHERE (isUsed = FALSE OR isUsed IS NULL) AND speed = 4
+       ORDER BY id ASC`,
+    );
+
+    const [available8M] = await pool.execute<RowDataPacket[]>(
+      `SELECT username, password, speed, startDate, firstContactDate, expiryDate,
+              CASE WHEN expiryDate IS NOT NULL THEN DATEDIFF(expiryDate, CURDATE()) + 1 ELSE 31 END AS remainingDays,
+              createdAt
+       FROM available_usernames
+       WHERE (isUsed = FALSE OR isUsed IS NULL) AND speed = 8
+       ORDER BY id ASC`,
+    );
+
+    const workbook = XLSX.utils.book_new();
+
+    const subscribersSheet = XLSX.utils.json_to_sheet(
+      subscribers.map((s: any) => ({
+        ID: s.id || "-",
+        "اسم المستخدم": s.username || "-",
+        "كلمة المرور": s.password || "-",
+        "اسم الزبون": s.fullName || "-",
+        "نوع المنشأة": s.facilityType || "-",
+        "رقم الجوال": s.phone || "-",
+        الخط: s.package || "-",
+        المبلغ: s.monthlyPrice || 0,
+        "تاريخ طلب الاشتراك": s.startDate ? formatDateForMySQL(s.startDate) : "-",
+        "تاريخ اول اتصال": s.firstContactDate
+          ? formatDateForMySQL(s.firstContactDate)
+          : "-",
+        "تاريخ الفصل": s.disconnectionDate
+          ? formatDateForMySQL(s.disconnectionDate)
+          : "-",
+        السرعة: `${s.speed || 4} ميجا`,
+        ملاحظات: s.notes || "-",
+      })),
+    );
+
+    const stoppedSheet = XLSX.utils.json_to_sheet(
+      stoppedSubscribers.map((s: any) => ({
+        "ID الأصلي": s.original_id || "-",
+        "اسم المستخدم": s.username || "-",
+        "كلمة المرور": s.password || "-",
+        "اسم الزبون": s.fullName || "-",
+        "نوع المنشأة": s.facilityType || "-",
+        "رقم الجوال": s.phone || "-",
+        الخط: s.package || "-",
+        "تاريخ طلب الاشتراك": s.startDate ? formatDateForMySQL(s.startDate) : "-",
+        "تاريخ اول اتصال": s.firstContactDate
+          ? formatDateForMySQL(s.firstContactDate)
+          : "-",
+        "تاريخ الفصل": s.disconnectionDate
+          ? formatDateForMySQL(s.disconnectionDate)
+          : "-",
+        السرعة: `${s.speed || 4} ميجا`,
+        ملاحظات: s.notes || "-",
+        "تاريخ الإيقاف": s.stoppedAt ? formatDateForMySQL(s.stoppedAt) : "-",
+        "سبب الإيقاف": s.stoppedReason || "-",
+      })),
+    );
+
+    const toAvailableSheet = (rows: any[]) =>
+      XLSX.utils.json_to_sheet(
+        rows.map((u: any) => ({
+          "اسم المستخدم": u.username || "-",
+          "كلمة المرور": u.password || "-",
+          السرعة: `${u.speed || 4} ميجا`,
+          "تاريخ طلب الاشتراك": u.startDate ? formatDateForMySQL(u.startDate) : "-",
+          "تاريخ اول اتصال": u.firstContactDate
+            ? formatDateForMySQL(u.firstContactDate)
+            : "-",
+          "تاريخ الفصل": u.expiryDate ? formatDateForMySQL(u.expiryDate) : "-",
+          "الأيام المتبقية": Math.max(0, Number(u.remainingDays ?? 31)),
+        })),
+      );
+
+    XLSX.utils.book_append_sheet(workbook, subscribersSheet, "المشتركين");
+    XLSX.utils.book_append_sheet(workbook, stoppedSheet, "المشتركون_المتوقفون");
+    XLSX.utils.book_append_sheet(workbook, toAvailableSheet(available4M), "متاح_4M");
+    XLSX.utils.book_append_sheet(workbook, toAvailableSheet(available8M), "متاح_8M");
+
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+    const fileName = `backup_all_data_${new Date().toISOString().split("T")[0]}.xlsx`;
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.send(buffer);
+  } catch (error) {
+    console.error("Error exporting backup data:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error exporting backup data",
+      error,
+    });
+  }
+};
+
 // Get subscriber profile with username history
 export const getSubscriberProfile = async (req: Request, res: Response) => {
   try {

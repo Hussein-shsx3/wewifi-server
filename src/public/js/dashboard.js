@@ -581,6 +581,9 @@ function setupEventListeners() {
   document
     .getElementById("exportExcelBtn")
     ?.addEventListener("click", exportToExcel);
+  document
+    .getElementById("exportBackupExcelBtn")
+    ?.addEventListener("click", exportBackupToExcel);
 
   // Upload type selection
   document.querySelectorAll('input[name="uploadType"]').forEach((radio) => {
@@ -1256,6 +1259,41 @@ async function exportToExcel() {
     alert("خطأ في تصدير الملف");
     const btn = document.getElementById("exportExcelBtn");
     btn.textContent = "تصدير Excel";
+    btn.disabled = false;
+  }
+}
+
+async function exportBackupToExcel() {
+  try {
+    const btn = document.getElementById("exportBackupExcelBtn");
+    const originalText = btn.textContent;
+    btn.textContent = "جاري تجهيز النسخة...";
+    btn.disabled = true;
+
+    const response = await authenticatedFetch("/api/subscribers/export-backup");
+
+    if (response.ok) {
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `backup_all_data_${new Date().toISOString().split("T")[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+    } else {
+      const result = await response.json();
+      alert("خطأ في تصدير النسخة الاحتياطية: " + (result.message || "خطأ غير معروف"));
+    }
+
+    btn.textContent = originalText;
+    btn.disabled = false;
+  } catch (error) {
+    console.error("Error exporting backup to Excel:", error);
+    alert("خطأ في تصدير النسخة الاحتياطية");
+    const btn = document.getElementById("exportBackupExcelBtn");
+    btn.textContent = "نسخة احتياطية Excel";
     btn.disabled = false;
   }
 }
