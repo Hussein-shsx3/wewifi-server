@@ -239,9 +239,9 @@ export const getSubscribers = async (req: Request, res: Response) => {
       countQuery += ` WHERE ${suspendedCondition}`;
     }
 
-    // Show newest subscribers first so fresh additions appear immediately.
+    // Order by first contact date (oldest first), keeping empty dates at the end.
     // Use string interpolation for LIMIT/OFFSET (safe because we validated as numbers)
-    query += ` ORDER BY createdAt DESC, id DESC LIMIT ${limitNum} OFFSET ${offset}`;
+    query += ` ORDER BY (firstContactDate IS NULL) ASC, firstContactDate ASC, id ASC LIMIT ${limitNum} OFFSET ${offset}`;
 
     // Use pool.query() instead of pool.execute() to avoid prepared statement issues
     const [rows] = await pool.query<RowDataPacket[]>(query, params);
