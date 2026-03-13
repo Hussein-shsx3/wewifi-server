@@ -1766,7 +1766,7 @@ export const exportSubscribers = async (req: Request, res: Response) => {
               startDate, firstContactDate, disconnectionDate, speed
        FROM subscribers
        WHERE isSuspended = FALSE
-       ORDER BY createdAt DESC, id DESC`,
+       ORDER BY (firstContactDate IS NULL) ASC, firstContactDate ASC, id DESC`,
     );
 
     // Prepare data for Excel with Arabic headers
@@ -1845,7 +1845,7 @@ export const exportBackupData = async (req: Request, res: Response) => {
       `SELECT id, username, password, fullName, facilityType, phone, \`package\`,
               monthlyPrice, startDate, firstContactDate, disconnectionDate, speed, notes, createdAt
        FROM subscribers
-       ORDER BY createdAt DESC, id DESC`,
+       ORDER BY (firstContactDate IS NULL) ASC, firstContactDate ASC, id DESC`,
     );
 
     const [stoppedSubscribers] = await pool.execute<RowDataPacket[]>(
