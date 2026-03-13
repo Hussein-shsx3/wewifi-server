@@ -3626,15 +3626,14 @@ export const getExpiringUsernames = async (req: Request, res: Response) => {
         .json({ success: false, message: "Database not available" });
     }
 
-    // Get subscribers where disconnectionDate is tomorrow or within next day
-    // (1 day before the deadline means disconnectionDate - 1 day = today)
+    // Get subscribers that are expired or will expire soon (within next 7 days)
     const [rows] = await pool.query<RowDataPacket[]>(
       `SELECT id as _id, id, username, password, fullName, facilityType, phone, \`package\`, 
               monthlyPrice, speed, startDate, firstContactDate, disconnectionDate, 
               isActive, isSuspended, notes, createdAt, updatedAt
        FROM subscribers 
        WHERE disconnectionDate IS NOT NULL 
-         AND disconnectionDate <= DATE_ADD(CURDATE(), INTERVAL 2 DAY)
+         AND disconnectionDate <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
          AND isSuspended = FALSE
        ORDER BY disconnectionDate ASC`,
     );

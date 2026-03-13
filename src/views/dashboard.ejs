@@ -693,17 +693,29 @@
             </div>
           </div>
 
-          <!-- Speed Filter -->
+          <!-- Filters -->
           <div class="filters-section" style="margin-bottom: 20px;">
             <div class="filters-header">
-              <h3>فلترة حسب السرعة</h3>
+              <h3>فلترة حسب السرعة والحالة</h3>
             </div>
-            <div class="filters-grid" style="grid-template-columns: repeat(3, auto) 1fr;">
+            <div class="filters-grid" style="grid-template-columns: repeat(6, auto) 1fr;">
               <label class="filter-checkbox">
                 <input type="checkbox" id="expiring4MFilter" checked> 4 ميجا
               </label>
               <label class="filter-checkbox">
                 <input type="checkbox" id="expiring8MFilter" checked> 8 ميجا
+              </label>
+              <label class="filter-checkbox">
+                <input type="checkbox" id="expiringExpiredFilter" checked> منتهي
+              </label>
+              <label class="filter-checkbox">
+                <input type="checkbox" id="expiring1DayFilter" checked> خلال يوم
+              </label>
+              <label class="filter-checkbox">
+                <input type="checkbox" id="expiring2DaysFilter" checked> خلال يومين
+              </label>
+              <label class="filter-checkbox">
+                <input type="checkbox" id="expiringSoonFilter" checked> سينتهي قريباً
               </label>
             </div>
           </div>
@@ -944,6 +956,33 @@
                   <button type="submit" class="action-btn primary">حفظ</button>
                   <button type="button" class="action-btn secondary"
                     onclick="closeEditAvailableUsernameModal()">إلغاء</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <!-- Assign Available Username Modal -->
+          <div id="assignAvailableUsernameModal" class="modal-overlay" style="display: none;">
+            <div class="modal-box">
+              <h3>تعيين اسم مستخدم لمشترك</h3>
+              <input type="hidden" id="assignAvailableUsernameId">
+              <div class="input-group">
+                <label>اسم المستخدم المختار</label>
+                <input type="text" id="assignAvailableUsernamePreview" class="profile-input readonly" readonly>
+              </div>
+              <div class="input-group">
+                <label>ابحث عن مشترك</label>
+                <input type="text" id="assignSubscriberSearchInput" placeholder="ابحث بالاسم أو اسم المستخدم أو ID">
+              </div>
+              <form id="assignAvailableUsernameForm">
+                <div class="input-group">
+                  <label>اختر المشترك</label>
+                  <select id="assignSubscriberSelect" required size="8"></select>
+                </div>
+                <div class="modal-actions">
+                  <button type="submit" class="action-btn primary">تأكيد التعيين</button>
+                  <button type="button" class="action-btn secondary"
+                    onclick="closeAssignAvailableUsernameModal()">إلغاء</button>
                 </div>
               </form>
             </div>

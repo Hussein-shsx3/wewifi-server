@@ -2734,6 +2734,7 @@ async function assignAvailableUsername() {
 // ===========================================
 
 let allAvailableUsernames = [];
+let assignSubscribersCache = [];
 
 // Load available usernames for both speeds
 async function loadAvailableUsernames() {
@@ -2840,6 +2841,7 @@ function displayAvailableUsernamesBySpeed(usernames, speed) {
       <td><span class="remaining-days-badge ${daysClass}">${remainingDays} يوم</span></td>
       <td>
         <div class="row-actions">
+          <button class="row-btn" onclick="openAssignAvailableUsernameModal(${u.id})" title="تعيين لمشترك">تعيين</button>
           <button class="row-btn edit" onclick="openEditAvailableUsername(${u.id})" title="تعديل">تعديل</button>
           <button class="row-btn delete" onclick="deleteAvailableUsername(${u.id})" title="حذف">حذف</button>
         </div>
@@ -2872,6 +2874,111 @@ function openEditAvailableUsername(id) {
 // Close edit available username modal
 function closeEditAvailableUsernameModal() {
   document.getElementById("editAvailableUsernameModal").style.display = "none";
+}
+
+async function openAssignAvailableUsernameModal(availableUsernameId) {
+  const item = allAvailableUsernames.find(
+    (u) => String(u.id) === String(availableUsernameId),
+  );
+  if (!item) {
+    alert("لم يتم العثور على اسم المستخدم المختار");
+    return;
+  }
+
+  document.getElementById("assignAvailableUsernameId").value =
+    String(availableUsernameId);
+  document.getElementById("assignAvailableUsernamePreview").value =
+    `${item.username || "-"} (${item.speed || 4} ميجا)`;
+  document.getElementById("assignSubscriberSearchInput").value = "";
+  document.getElementById("assignAvailableUsernameModal").style.display = "flex";
+
+  await loadSubscribersForAssignModal();
+  renderAssignSubscriberOptions("");
+}
+
+function closeAssignAvailableUsernameModal() {
+  document.getElementById("assignAvailableUsernameModal").style.display = "none";
+  document.getElementById("assignAvailableUsernameId").value = "";
+  document.getElementById("assignAvailableUsernamePreview").value = "";
+  document.getElementById("assignSubscriberSearchInput").value = "";
+  document.getElementById("assignSubscriberSelect").innerHTML = "";
+}
+
+async function loadSubscribersForAssignModal() {
+  try {
+    const response = await authenticatedFetch("/api/subscribers?limit=10000");
+    const result = await response.json();
+    assignSubscribersCache = result.success ? result.data || [] : [];
+  } catch (error) {
+    console.error("Error loading subscribers for assign modal:", error);
+    assignSubscribersCache = [];
+  }
+}
+
+function renderAssignSubscriberOptions(searchTerm = "") {
+  const select = document.getElementById("assignSubscriberSelect");
+  if (!select) return;
+
+  const term = String(searchTerm || "").trim().toLowerCase();
+  const filtered = assignSubscribersCache.filter((s) => {
+    if (!term) return true;
+    const id = String(s._id || s.id || "").toLowerCase();
+    const fullName = String(s.fullName || "").toLowerCase();
+    const username = String(s.username || "").toLowerCase();
+    return (
+      id.includes(term) || fullName.includes(term) || username.includes(term)
+    );
+  });
+
+  if (filtered.length === 0) {
+    select.innerHTML = "";
+    return;
+  }
+
+  select.innerHTML = filtered
+    .map(
+      (s) =>
+        `<option value="${s._id || s.id}">${s._id || s.id} — ${s.fullName || s.username || "-"} (${s.username || "-"})</option>`,
+    )
+    .join("");
+}
+
+async function assignAvailableUsernameFromAvailablePage(e) {
+  e.preventDefault();
+
+  const availableUsernameId = document.getElementById(
+    "assignAvailableUsernameId",
+  ).value;
+  const subscriberId = document.getElementById("assignSubscriberSelect").value;
+
+  if (!availableUsernameId || !subscriberId) {
+    alert("يرجى اختيار مشترك");
+    return;
+  }
+
+  try {
+    const response = await authenticatedFetch("/api/subscribers/assign-username", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ availableUsernameId, subscriberId }),
+    });
+    const result = await response.json();
+
+    if (result.success) {
+      closeAssignAvailableUsernameModal();
+      await loadAvailableUsernames();
+      await loadAvailableUsernamesDropdown();
+      await loadSubscribers(1);
+      await loadExpiringUsernames();
+      loadStats();
+      showToast("تم تعيين اسم المستخدم بنجاح", "success");
+    } else {
+      alert("خطأ في التعيين: " + result.message);
+    }
+  } catch (error) {
+    console.error("Error assigning available username:", error);
+    alert("خطأ في تعيين اسم المستخدم");
+  }
 }
 
 // Handle edit available username form submit
@@ -3185,6 +3292,14 @@ function setupNewFeatureListeners() {
   document
     .getElementById("editAvailableCycleMode")
     ?.addEventListener("change", handleEditAvailableCycleModeChange);
+  document
+    .getElementById("assignAvailableUsernameForm")
+    ?.addEventListener("submit", assignAvailableUsernameFromAvailablePage);
+  document
+    .getElementById("assignSubscriberSearchInput")
+    ?.addEventListener("input", (e) => {
+      renderAssignSubscriberOptions(e.target.value || "");
+    });
 
   // SMS form
   document
@@ -4244,6 +4359,18 @@ function setupExpiringUsernamesListeners() {
   document
     .getElementById("expiring8MFilter")
     ?.addEventListener("change", filterExpiringUsernames);
+  document
+    .getElementById("expiringExpiredFilter")
+    ?.addEventListener("change", filterExpiringUsernames);
+  document
+    .getElementById("expiring1DayFilter")
+    ?.addEventListener("change", filterExpiringUsernames);
+  document
+    .getElementById("expiring2DaysFilter")
+    ?.addEventListener("change", filterExpiringUsernames);
+  document
+    .getElementById("expiringSoonFilter")
+    ?.addEventListener("change", filterExpiringUsernames);
 
   // Speed selection in modal
   document
@@ -4285,15 +4412,40 @@ async function loadExpiringUsernames() {
   }
 }
 
-// Filter expiring usernames by speed
+function getExpiringDiffDays(disconnectionDateValue) {
+  const normalized = formatDateForInput(disconnectionDateValue);
+  if (!normalized) return null;
+  const [year, month, day] = normalized.split("-").map(Number);
+  const endDate = new Date(year, month - 1, day);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  endDate.setHours(0, 0, 0, 0);
+  const diffTime = endDate.getTime() - today.getTime();
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+
+// Filter expiring usernames by speed and status
 function filterExpiringUsernames() {
   const show4M = document.getElementById("expiring4MFilter")?.checked ?? true;
   const show8M = document.getElementById("expiring8MFilter")?.checked ?? true;
+  const showExpired =
+    document.getElementById("expiringExpiredFilter")?.checked ?? true;
+  const show1Day = document.getElementById("expiring1DayFilter")?.checked ?? true;
+  const show2Days =
+    document.getElementById("expiring2DaysFilter")?.checked ?? true;
+  const showSoon = document.getElementById("expiringSoonFilter")?.checked ?? true;
 
   const filtered = expiringUsernamesData.filter((sub) => {
     if (sub.speed == 4 && !show4M) return false;
     if (sub.speed == 8 && !show8M) return false;
-    return true;
+    const diffDays = getExpiringDiffDays(sub.disconnectionDate);
+    if (diffDays === null) return false;
+
+    if (diffDays < 0) return showExpired;
+    if (diffDays <= 1) return show1Day;
+    if (diffDays === 2) return show2Days;
+    if (diffDays >= 3) return showSoon;
+    return false;
   });
 
   displayExpiringUsernames(filtered);
@@ -4312,13 +4464,8 @@ function displayExpiringUsernames(subscribers) {
 
   tableBody.innerHTML = subscribers
     .map((sub) => {
-      const disconnectionDate = new Date(sub.disconnectionDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      disconnectionDate.setHours(0, 0, 0, 0);
-
-      const diffTime = disconnectionDate - today;
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const diffDays = getExpiringDiffDays(sub.disconnectionDate);
+      if (diffDays === null) return "";
 
       let daysText = "";
       let daysClass = "";
@@ -4332,6 +4479,9 @@ function displayExpiringUsernames(subscribers) {
       } else if (diffDays === 1) {
         daysText = "غداً";
         daysClass = "days-urgent";
+      } else if (diffDays === 2) {
+        daysText = "بعد يومين";
+        daysClass = "days-warning";
       } else {
         daysText = `${diffDays} أيام`;
         daysClass = "days-warning";
