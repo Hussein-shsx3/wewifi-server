@@ -420,6 +420,9 @@ function setupEventListeners() {
   document
     .getElementById("importExcelBtn")
     ?.addEventListener("click", openImportModal);
+  document
+    .getElementById("refreshLogsBtn")
+    ?.addEventListener("click", loadActivityLogs);
 
   // Upload area
   const uploadArea = document.getElementById("uploadArea");
@@ -1677,6 +1680,68 @@ async function loadStatsLegacy() {
   } catch (error) {
     console.error("Error loading legacy stats:", error);
   }
+}
+
+function formatDateTime(dateString) {
+  if (!dateString) return "-";
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "-";
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(date.getFullYear());
+  const hh = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+}
+
+async function loadActivityLogs(page = 1) {
+  try {
+    const response = await authenticatedFetch(
+      `/api/subscribers/logs?page=${page}&limit=200`,
+    );
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.message || "Failed to load logs");
+    }
+    displayActivityLogs(result.data || []);
+  } catch (error) {
+    if (error.message === "Not authenticated") return;
+    console.error("Error loading activity logs:", error);
+    const tableBody = document.getElementById("activityLogsTableBody");
+    if (tableBody) {
+      tableBody.innerHTML =
+        '<tr><td colspan="7" class="text-center">خطأ في تحميل سجل العمليات</td></tr>';
+    }
+  }
+}
+
+function displayActivityLogs(logs) {
+  const tableBody = document.getElementById("activityLogsTableBody");
+  if (!tableBody) return;
+
+  if (!logs || logs.length === 0) {
+    tableBody.innerHTML =
+      '<tr><td colspan="7" class="text-center">لا توجد عمليات مسجلة بعد</td></tr>';
+    return;
+  }
+
+  tableBody.innerHTML = logs
+    .map((log) => {
+      const details = log.details ? escapeHtml(String(log.details)) : "-";
+      const statusClass =
+        Number(log.statusCode) >= 400 ? "status-badge status-suspended" : "";
+      return `
+      <tr>
+        <td>${formatDateTime(log.createdAt)}</td>
+        <td>${escapeHtml(log.actor || "-")}</td>
+        <td>${escapeHtml(log.action || "-")}</td>
+        <td>${escapeHtml(log.method || "-")}</td>
+        <td><span title="${escapeHtml(log.endpoint || "-")}">${escapeHtml(log.endpoint || "-")}</span></td>
+        <td><span class="${statusClass}">${escapeHtml(log.statusCode || "-")}</span></td>
+        <td><span title="${details}">${details}</span></td>
+      </tr>`;
+    })
+    .join("");
 }
 
 // Update speed chart
@@ -4111,6 +4176,8 @@ switchSection = async function (sectionId) {
     loadStoppedSubscribers();
   } else if (sectionId === "expiring-usernames") {
     loadExpiringUsernames();
+  } else if (sectionId === "activity-logs") {
+    loadActivityLogs();
   } else if (sectionId === "sms") {
     // Load subscribers then populate dropdown for SMS
     await loadSubscribers(1, "");

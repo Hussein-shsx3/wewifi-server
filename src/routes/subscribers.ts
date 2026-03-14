@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import multer from "multer";
 import { authMiddleware } from "../middleware/auth";
+import activityLogMiddleware from "../middleware/activityLog";
 import {
   getSubscribers,
   createSubscriber,
@@ -37,6 +38,7 @@ import {
   bulkChangeUsernames,
   searchByOldUsername,
   getDashboardStats,
+  getActivityLogs,
   addUsernameHistoryEntry,
   updateUsernameHistoryEntry,
   deleteUsernameHistoryEntry,
@@ -48,9 +50,11 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Apply auth middleware to all subscriber routes
 router.use(authMiddleware);
+router.use(activityLogMiddleware);
 
 // Dashboard stats route
 router.get("/dashboard-stats", getDashboardStats);
+router.get("/logs", getActivityLogs);
 
 // Main subscriber routes
 router.get("/", getSubscribers);

@@ -93,6 +93,24 @@ const createTables = async () => {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `;
 
+  // Activity logs table for auditing dashboard operations
+  const createActivityLogsTable = `
+    CREATE TABLE IF NOT EXISTS activity_logs (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      actor VARCHAR(100) DEFAULT 'admin',
+      action VARCHAR(255) NOT NULL,
+      method VARCHAR(10) NOT NULL,
+      endpoint VARCHAR(255) NOT NULL,
+      statusCode INT DEFAULT 200,
+      details TEXT NULL,
+      ipAddress VARCHAR(120) NULL,
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_createdAt (createdAt),
+      INDEX idx_method (method),
+      INDEX idx_actor (actor)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `;
+
   try {
     await pool.execute(createSubscribersTable);
     console.log("✓ Subscribers table ready");
@@ -102,6 +120,9 @@ const createTables = async () => {
 
     await pool.execute(createAvailableUsernamesTable);
     console.log("✓ Available usernames table ready");
+
+    await pool.execute(createActivityLogsTable);
+    console.log("✓ Activity logs table ready");
 
     // Alter existing table to allow NULL values for phone and other fields
     const alterStatements = [

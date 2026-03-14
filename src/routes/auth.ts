@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { publicMiddleware } from "../middleware/auth";
 import dotenv from "dotenv";
+import { writeActivityLog } from "../utils/activityLog";
 
 dotenv.config();
 
@@ -19,13 +20,40 @@ router.post("/login", publicMiddleware, (req: Request, res: Response) => {
   if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
     req.session.isAuthenticated = true;
     req.session.adminId = "admin";
+    void writeActivityLog({
+      actor: "admin",
+      action: "LOGIN",
+      method: "POST",
+      endpoint: "/login",
+      statusCode: 302,
+      details: JSON.stringify({ username }),
+      ipAddress: req.ip || null,
+    });
     res.redirect("/dashboard");
   } else {
+    void writeActivityLog({
+      actor: username || "unknown",
+      action: "LOGIN_FAILED",
+      method: "POST",
+      endpoint: "/login",
+      statusCode: 401,
+      details: JSON.stringify({ username }),
+      ipAddress: req.ip || null,
+    });
     res.render("login", { error: "Invalid username or password" });
   }
 });
 
 router.get("/logout", (req: Request, res: Response) => {
+  const actor = req.session?.adminId || "admin";
+  void writeActivityLog({
+    actor,
+    action: "LOGOUT",
+    method: "GET",
+    endpoint: "/logout",
+    statusCode: 302,
+    ipAddress: req.ip || null,
+  });
   req.session.destroy((err) => {
     if (err) {
       return res.status(500).send("Could not log out");

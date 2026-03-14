@@ -3942,6 +3942,51 @@ export const searchByOldUsername = async (req: Request, res: Response) => {
   }
 };
 
+// Get activity logs
+export const getActivityLogs = async (req: Request, res: Response) => {
+  try {
+    const pool = getPool();
+
+    if (!pool) {
+      return res
+        .status(503)
+        .json({ success: false, message: "Database not available" });
+    }
+
+    const pageNum = Math.max(1, Number(req.query.page) || 1);
+    const limitNum = Math.max(1, Math.min(1000, Number(req.query.limit) || 200));
+    const offset = (pageNum - 1) * limitNum;
+
+    const [rows] = await pool.query<RowDataPacket[]>(
+      `SELECT id, actor, action, method, endpoint, statusCode, details, ipAddress, createdAt
+       FROM activity_logs
+       ORDER BY id DESC
+       LIMIT ${limitNum} OFFSET ${offset}`,
+    );
+    const [countRows] = await pool.query<RowDataPacket[]>(
+      "SELECT COUNT(*) as total FROM activity_logs",
+    );
+
+    res.json({
+      success: true,
+      data: rows,
+      pagination: {
+        total: countRows[0]?.total || 0,
+        page: pageNum,
+        pages: Math.ceil((countRows[0]?.total || 0) / limitNum),
+        limit: limitNum,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching activity logs:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching activity logs",
+      error,
+    });
+  }
+};
+
 // Get comprehensive dashboard statistics
 export const getDashboardStats = async (req: Request, res: Response) => {
   try {
