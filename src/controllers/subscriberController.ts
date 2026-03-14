@@ -272,8 +272,8 @@ export const getSubscribers = async (req: Request, res: Response) => {
   }
 };
 
-// Helper function to calculate disconnection date for a 31-day cycle.
-// Business rule: first contact day counts as day 1, so expiry date = start + 30 days.
+// Helper function to calculate disconnection date.
+// Business rule: service still works on day 31, so end date is the day after (+31 days).
 const parseAsLocalDate = (
   value: Date | string | null | undefined,
 ): Date | null => {
@@ -314,7 +314,7 @@ const calculateDisconnectionDate = (
   if (!firstContactDate) return null;
   const date = parseAsLocalDate(firstContactDate);
   if (!date) return null;
-  date.setDate(date.getDate() + 30);
+  date.setDate(date.getDate() + 31);
   return formatDateForMySQL(date);
 };
 

@@ -1683,27 +1683,31 @@ async function loadStatsLegacy() {
 function updateSpeedChart(speedData, total) {
   const speed4mCount = document.getElementById("speed4mCount");
   const speed8mCount = document.getElementById("speed8mCount");
+  const speed16mCount = document.getElementById("speed16mCount");
   const speedDonutTotal = document.getElementById("speedDonutTotal");
 
   let count4m = 0,
-    count8m = 0;
+    count8m = 0,
+    count16m = 0;
 
   if (speedData) {
     speedData.forEach((item) => {
       if (item.speed === 4) count4m = item.count;
       else if (item.speed === 8) count8m = item.count;
+      else if (item.speed === 16) count16m = item.count;
     });
   }
 
   if (speed4mCount) speed4mCount.textContent = count4m;
   if (speed8mCount) speed8mCount.textContent = count8m;
-  if (speedDonutTotal) speedDonutTotal.textContent = count4m + count8m;
+  if (speed16mCount) speed16mCount.textContent = count16m;
+  if (speedDonutTotal) speedDonutTotal.textContent = count4m + count8m + count16m;
 
   // Draw donut chart
-  drawDonutChart(count4m, count8m);
+  drawDonutChart(count4m, count8m, count16m);
 }
 
-function drawDonutChart(count4m, count8m) {
+function drawDonutChart(count4m, count8m, count16m = 0) {
   const canvas = document.getElementById("speedDonutChart");
   if (!canvas) return;
 
@@ -1721,7 +1725,7 @@ function drawDonutChart(count4m, count8m) {
   const cy = size / 2;
   const outerR = 72;
   const innerR = 48;
-  const total = count4m + count8m;
+  const total = count4m + count8m + count16m;
 
   ctx.clearRect(0, 0, size, size);
 
@@ -1738,6 +1742,7 @@ function drawDonutChart(count4m, count8m) {
   const slices = [
     { value: count4m, color: "#f5a623" },
     { value: count8m, color: "#0891b2" },
+    { value: count16m, color: "#8b5cf6" },
   ];
 
   let startAngle = -Math.PI / 2;
@@ -1757,12 +1762,24 @@ function drawDonutChart(count4m, count8m) {
   });
 
   // Gap between slices
-  if (count4m > 0 && count8m > 0) {
-    const gapWidth = 0.03;
-    const angles = [
-      -Math.PI / 2,
-      -Math.PI / 2 + (count4m / total) * Math.PI * 2,
-    ];
+  const positiveSliceCount = slices.filter((slice) => slice.value > 0).length;
+  if (positiveSliceCount > 1) {
+    // Keep separators subtle so very small slices (e.g. speed 16 count = 1)
+    // stay visible and don't get erased by the white gap.
+    const minPositiveRatio = Math.min(
+      ...slices
+        .filter((slice) => slice.value > 0)
+        .map((slice) => slice.value / total),
+    );
+    const dynamicGap = minPositiveRatio * Math.PI; // half of slice angle
+    const gapWidth = Math.max(0.003, Math.min(0.012, dynamicGap * 0.35));
+    const angles = [-Math.PI / 2];
+    let runningAngle = -Math.PI / 2;
+    slices.forEach((slice) => {
+      if (slice.value === 0) return;
+      runningAngle += (slice.value / total) * Math.PI * 2;
+      angles.push(runningAngle);
+    });
     angles.forEach((angle) => {
       ctx.beginPath();
       ctx.arc(cx, cy, outerR + 1, angle - gapWidth, angle + gapWidth);

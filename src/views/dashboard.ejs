@@ -151,12 +151,18 @@
                       <span class="legend-label">8 ميجا</span>
                       <span class="legend-value" id="speed8mCount">0</span>
                     </div>
+                  <div class="legend-item">
+                    <span class="legend-dot" style="background: #8b5cf6;"></span>
+                    <span class="legend-label">16 ميجا</span>
+                    <span class="legend-value" id="speed16mCount">0</span>
+                  </div>
                   </div>
                 </div>
                 <!-- Hidden bars for backward compatibility -->
                 <div style="display:none;">
                   <div id="speed4mBar"></div>
                   <div id="speed8mBar"></div>
+                <div id="speed16mBar"></div>
                 </div>
               </div>
             </div>
@@ -331,7 +337,7 @@
               <span>إدارة المشتركين</span>
             </a>
             <a href="#available-usernames" class="action-btn">
-              <i class="fas fa-file-list"></i>
+              <i class="fas fa-list"></i>
               <span>أسماء المستخدمين</span>
             </a>
             <a href="#expiring-usernames" class="action-btn">
@@ -639,6 +645,7 @@
                   <option value="">الكل</option>
                   <option value="4">4 ميجا</option>
                   <option value="8">8 ميجا</option>
+                  <option value="16">16 ميجا</option>
                 </select>
               </div>
               <div class="filter-group">
