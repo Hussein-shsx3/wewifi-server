@@ -2586,9 +2586,14 @@ export const addAvailableUsername = async (req: Request, res: Response) => {
       });
     }
 
+    const startDateValue =
+      startDate && String(startDate).trim()
+        ? formatDateForMySQL(startDate)
+        : null;
+
     await pool.execute(
       "INSERT INTO available_usernames (username, password, speed, startDate) VALUES (?, ?, ?, ?)",
-      [username, password || null, speed || 4, formatDateForMySQL(startDate)],
+      [username, password || null, speed || 4, startDateValue],
     );
 
     res.json({

@@ -3553,6 +3553,12 @@ a {
   color: #5f6368;
 }
 
+.optional-label {
+  font-weight: 400;
+  color: #9aa0a6;
+  font-size: 12px;
+}
+
 .input-group input {
   width: 100%;
   padding: 10px 12px;
